@@ -1,0 +1,159 @@
+{
+  "source": "Microsoft Learn AZ-900 study guide, skills measured as of July 20, 2026",
+  "domains": [
+    {
+      "id": 1,
+      "name": "Describe cloud concepts",
+      "weight": "25-30%",
+      "code": "cc"
+    },
+    {
+      "id": 2,
+      "name": "Describe Azure architecture and services",
+      "weight": "35-40%",
+      "code": "as"
+    },
+    {
+      "id": 3,
+      "name": "Describe Azure management and governance",
+      "weight": "30-35%",
+      "code": "mg"
+    }
+  ],
+  "topics": [
+    {
+      "id": "cloud-computing",
+      "domain_id": 1,
+      "name": "Describe cloud computing",
+      "objectives": [
+        "Define cloud computing",
+        "Describe the shared responsibility model",
+        "Define cloud models, including public, private, and hybrid",
+        "Identify appropriate use cases for each cloud model",
+        "Describe the consumption-based model",
+        "Compare cloud pricing models",
+        "Describe serverless"
+      ]
+    },
+    {
+      "id": "cloud-benefits",
+      "domain_id": 1,
+      "name": "Describe the benefits of using cloud services",
+      "objectives": [
+        "Describe the benefits of high availability and scalability in the cloud",
+        "Describe the benefits of reliability and predictability in the cloud",
+        "Describe the benefits of security and governance in the cloud",
+        "Describe the benefits of manageability in the cloud"
+      ]
+    },
+    {
+      "id": "cloud-service-types",
+      "domain_id": 1,
+      "name": "Describe cloud service types",
+      "objectives": [
+        "Describe infrastructure as a service (IaaS)",
+        "Describe platform as a service (PaaS)",
+        "Describe software as a service (SaaS)",
+        "Identify appropriate use cases for each cloud service type (IaaS, PaaS, and SaaS)"
+      ]
+    },
+    {
+      "id": "core-architecture",
+      "domain_id": 2,
+      "name": "Describe the core architectural components of Azure",
+      "objectives": [
+        "Describe Azure regions, region pairs, and sovereign regions",
+        "Describe availability zones",
+        "Describe Azure datacenters",
+        "Describe Azure resources and resource groups",
+        "Describe subscriptions",
+        "Describe management groups",
+        "Describe the hierarchy of resource groups, subscriptions, and management groups"
+      ]
+    },
+    {
+      "id": "compute-networking",
+      "domain_id": 2,
+      "name": "Describe Azure compute and networking services",
+      "objectives": [
+        "Compare compute types, including containers, virtual machines, and functions",
+        "Describe virtual machine options, including Azure virtual machines, Azure Virtual Machine Scale Sets, availability sets, and Azure Virtual Desktop",
+        "Describe the resources required for virtual machines",
+        "Describe application hosting options, including web apps, containers, and virtual machines",
+        "Describe virtual networking, including the purpose of Azure virtual networks, subnets, peering, Azure DNS, Azure VPN Gateway, and ExpressRoute",
+        "Define public and private endpoints"
+      ]
+    },
+    {
+      "id": "storage",
+      "domain_id": 2,
+      "name": "Describe Azure storage services",
+      "objectives": [
+        "Compare Azure Storage services",
+        "Describe storage tiers",
+        "Describe redundancy options",
+        "Describe storage account options and storage types",
+        "Identify options for moving files, including AzCopy, Azure Storage Explorer, and Azure File Sync",
+        "Describe migration options, including Azure Migrate and Azure Data Box"
+      ]
+    },
+    {
+      "id": "identity-security",
+      "domain_id": 2,
+      "name": "Describe Azure identity, access, and security",
+      "objectives": [
+        "Describe directory services in Azure, including Microsoft Entra ID and Microsoft Entra Domain Services",
+        "Describe authentication methods in Azure, including single sign-on (SSO), multifactor authentication (MFA), and passwordless",
+        "Describe external identities in Azure",
+        "Describe Microsoft Entra Conditional Access",
+        "Describe Azure role-based access control (RBAC)",
+        "Describe the concept of Zero Trust",
+        "Describe the purpose of the defense-in-depth model",
+        "Describe the purpose of Microsoft Defender for Cloud"
+      ]
+    },
+    {
+      "id": "cost-management",
+      "domain_id": 3,
+      "name": "Describe cost management in Azure",
+      "objectives": [
+        "Describe factors that can affect costs in Azure",
+        "Explore the pricing calculator",
+        "Describe cost management capabilities in Azure",
+        "Describe the purpose of tags"
+      ]
+    },
+    {
+      "id": "governance-compliance",
+      "domain_id": 3,
+      "name": "Describe features and tools in Azure for governance and compliance",
+      "objectives": [
+        "Describe the purpose of Microsoft Purview in Azure",
+        "Describe the purpose of Azure Policy",
+        "Describe the purpose of resource locks"
+      ]
+    },
+    {
+      "id": "managing-deploying",
+      "domain_id": 3,
+      "name": "Describe features and tools for managing and deploying Azure resources",
+      "objectives": [
+        "Describe the Azure portal",
+        "Describe Azure Cloud Shell, Azure CLI, and Azure PowerShell",
+        "Describe the purpose of Azure Arc",
+        "Describe infrastructure as code (IaC)",
+        "Describe Azure Resource Manager (ARM) and ARM templates"
+      ]
+    },
+    {
+      "id": "monitoring",
+      "domain_id": 3,
+      "name": "Describe monitoring tools in Azure",
+      "objectives": [
+        "Describe the purpose of Azure Advisor",
+        "Describe Azure Service Health",
+        "Describe Azure Monitor, including Log Analytics, Azure Monitor alerts, and Azure Monitor Application Insights"
+      ]
+    }
+  ]
+}
