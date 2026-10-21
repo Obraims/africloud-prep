@@ -1,0 +1,9 @@
+{
+  "name": "africloud-prep",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
