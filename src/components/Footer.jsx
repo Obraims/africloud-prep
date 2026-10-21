@@ -1,7 +1,8 @@
+import React from 'react';
 import { Cloud } from 'lucide-react';
-import { useRouter, type Route } from '@/context/RouterContext';
+import { useRouter } from '@/context/RouterContext';
 
-const footerLinks: { label: string; route: Route }[] = [
+const footerLinks = [
   { label: 'Dashboard', route: 'dashboard' },
   { label: 'Quiz', route: 'quiz' },
   { label: 'Flashcards', route: 'flashcards' },

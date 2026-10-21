@@ -1,8 +1,11 @@
-import { Cloud, Moon, Sun } from 'lucide-react';
+import React, { useState } from 'react';
+import { Cloud, Moon, Sun, User } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
-import { useRouter, type Route } from '@/context/RouterContext';
+import { useRouter } from '@/context/RouterContext';
+import { useAuth } from '@/context/AuthContext';
+import { AuthModal } from './AuthModal';
 
-const navItems: { label: string; route: Route }[] = [
+const navItems = [
   { label: 'Dashboard', route: 'dashboard' },
   { label: 'Quiz', route: 'quiz' },
   { label: 'Flashcards', route: 'flashcards' },
@@ -12,6 +15,8 @@ const navItems: { label: string; route: Route }[] = [
 export function TopNav() {
   const { theme, toggle } = useTheme();
   const { route, navigate } = useRouter();
+  const { profile } = useAuth();
+  const [authOpen, setAuthOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/80 glass dark:border-slate-800/80">
@@ -32,7 +37,7 @@ export function TopNav() {
               onClick={() => navigate(item.route)}
               className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
                 route === item.route
-                  ? 'text-slate-900 dark:text-white'
+                  ? 'text-slate-900 dark:text-white font-bold bg-slate-100/70 dark:bg-slate-800/70'
                   : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
               }`}
             >
@@ -49,14 +54,18 @@ export function TopNav() {
           >
             {theme === 'dark' ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
           </button>
+          
           <button
-            onClick={() => navigate('dashboard')}
-            className="hidden rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white shadow-soft transition-transform hover:scale-[1.03] active:scale-95 sm:block dark:bg-indigo-600"
+            onClick={() => setAuthOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-300"
           >
-            Get started
+            <User className="h-3.5 w-3.5" />
+            <span>{profile?.display_name ? profile.display_name.split(' ')[0] : 'Account'}</span>
           </button>
         </div>
       </nav>
+
+      <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
     </header>
   );
 }

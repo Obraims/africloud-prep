@@ -1,6 +1,8 @@
+import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { RouterProvider, useRouter } from '@/context/RouterContext';
+import { AuthProvider } from '@/context/AuthContext';
 import { TopNav } from '@/components/TopNav';
 import { Footer } from '@/components/Footer';
 import { LandingPage } from '@/pages/LandingPage';
@@ -53,9 +55,11 @@ function Routes() {
 function App() {
   return (
     <ThemeProvider>
-      <RouterProvider>
-        <Routes />
-      </RouterProvider>
+      <AuthProvider>
+        <RouterProvider>
+          <Routes />
+        </RouterProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

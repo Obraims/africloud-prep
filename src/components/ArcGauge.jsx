@@ -1,23 +1,15 @@
-import { useMemo } from 'react';
-
-interface ArcGaugeProps {
-  value: number;
-  size?: number;
-  thickness?: number;
-  label?: string;
-  sublabel?: string;
-}
+import React, { useMemo } from 'react';
 
 /** Flat-color semicircle gauge built from SVG arcs (no gradients). */
-export function ArcGauge({ value, size = 220, thickness = 18, label, sublabel }: ArcGaugeProps) {
+export function ArcGauge({ value, size = 220, thickness = 18, label, sublabel }) {
   const radius = (size - thickness) / 2;
   const cx = size / 2;
   const cy = size / 2;
   const startAngle = 180;
   const endAngle = 360;
 
-  const describeArc = (fromAngle: number, toAngle: number) => {
-    const polar = (angle: number) => {
+  const describeArc = (fromAngle, toAngle) => {
+    const polar = (angle) => {
       const a = (angle * Math.PI) / 180;
       return { x: cx + radius * Math.cos(a), y: cy + radius * Math.sin(a) };
     };
