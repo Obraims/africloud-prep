@@ -79,6 +79,13 @@ flowchart LR
 | Deployment | Vercel (frontend), Supabase (backend) |
 | Tooling | Antigravity (build), Claude (planning, prompts, content), Gemini (refinement and in-app AI) |
 
+### Routing Architecture & Accessibility
+
+- **`/` (Public)**: Landing Page featuring the Bolt design system with WCAG AA compliant color contrast.
+- **`/auth` (Public)**: Real Supabase Authentication portal for registration and login.
+- **`/dashboard` (Protected)**: Main application Bento Grid readiness dashboard.
+- **Route Guards**: Unauthenticated access to `/dashboard` redirects strictly to `/auth`. Authenticated users visiting `/` or `/auth` redirect to `/dashboard`.
+
 **Design system:** flat solid colours only, light and dark themes, mobile-first. A CI-style script (`npm run check:no-gradients`) fails if any gradient appears in the source.
 
 ## Project structure
