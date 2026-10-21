@@ -128,21 +128,21 @@ export function LandingPage() {
             </p>
           </div>
 
-          {/* Card 2: AI Study Buddy */}
-          <div className="my-4 space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-850">
+          {/* Section immediately below AI Study Buddy feature description with fixed contrast (WCAG AA compliant) */}
+          <div className="my-4 space-y-2.5 rounded-xl border border-slate-200 bg-slate-100/90 p-4 dark:border-slate-800 dark:bg-slate-850">
             <div className="flex items-start gap-2.5">
-              <span className="rounded-md bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+              <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-950 dark:bg-indigo-950 dark:text-indigo-300 shrink-0">
                 SW
               </span>
-              <p className="text-xs text-slate-700 dark:text-slate-200">
+              <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 leading-relaxed">
                 "Availability Zone ni kama maduka tofauti ya wakala wa M-Pesa mtaani: moja likikosa stima, lingine mtaa wa pili linaendelea kuhudumia."
               </p>
             </div>
             <div className="flex items-start gap-2.5">
-              <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+              <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-950 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
                 SH
               </span>
-              <p className="text-xs text-slate-700 dark:text-slate-200">
+              <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 leading-relaxed">
                 "Azure Policy ni kama by-laws za county — lazima kila gari ipitie inspection ndio ishikwe na kanjo."
               </p>
             </div>
