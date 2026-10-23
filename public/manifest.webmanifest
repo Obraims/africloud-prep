@@ -6,7 +6,7 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#007BA7",
+  "theme_color": "#050505",
   "background_color": "#050505",
   "icons": [
     {
@@ -36,6 +36,16 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quick quiz",
+      "url": "/quiz"
+    },
+    {
+      "name": "Review cards",
+      "url": "/flashcards"
     }
   ]
 }

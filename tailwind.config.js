@@ -8,6 +8,13 @@ export default {
         sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
         display: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
       },
+      spacing: {
+        'safe-b': 'env(safe-area-inset-bottom)',
+        'safe-t': 'env(safe-area-inset-top)',
+      },
+      minHeight: {
+        tap: '48px',
+      },
       colors: {
         // Background & Surfaces (Jet Black)
         jet: {
