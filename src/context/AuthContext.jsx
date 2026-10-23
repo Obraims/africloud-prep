@@ -7,16 +7,6 @@ const AuthContext = createContext(null);
 const DEMO_USER_KEY = 'africloud_prep_demo_user';
 const DEMO_PROFILE_KEY = 'africloud_prep_demo_profile';
 
-const DEFAULT_GUEST_PROFILE = {
-  id: 'guest-amina-kimani',
-  email: 'amina.kimani@africloud.dev',
-  display_name: 'Amina Kimani',
-  exam_date: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  daily_hours: 1.5,
-  target_score: 80,
-  streak_days: 3,
-};
-
 export function AuthProvider({ children }) {
   // Synchronous initial restore from localStorage so there is ZERO spinner on page refresh
   const [user, setUser] = useState(() => {
@@ -70,7 +60,7 @@ export function AuthProvider({ children }) {
         setTimeout(() => reject(new Error('Profile fetch timeout')), 2000)
       );
 
-      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+      const { data } = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (data) {
         setProfile(data);

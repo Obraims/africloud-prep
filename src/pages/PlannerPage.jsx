@@ -8,12 +8,7 @@ import {
   Download,
   Sparkles,
   ArrowRight,
-  ShieldCheck,
-  Flame,
-  BookOpen,
-  Brain,
   Check,
-  Share2,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from '@/context/RouterContext';

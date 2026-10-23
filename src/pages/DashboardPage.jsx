@@ -9,7 +9,6 @@ import {
   Clock,
   Flame,
   Target,
-  TrendingUp,
 } from 'lucide-react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import { ArcGauge } from '@/components/ArcGauge';

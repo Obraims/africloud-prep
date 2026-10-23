@@ -1,4 +1,4 @@
-import { BookOpen, Brain, Calendar, LayoutDashboard, MessageCircle } from 'lucide-react';
+import { BookOpen, Brain, LayoutDashboard, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from '@/context/RouterContext';
 
