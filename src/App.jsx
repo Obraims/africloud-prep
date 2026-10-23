@@ -5,6 +5,7 @@ import { RouterProvider } from '@/context/RouterContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { PwaProvider } from '@/context/PwaContext';
 import { TopNav } from '@/components/TopNav';
+import { MobileTabBar } from '@/components/MobileTabBar';
 import { Footer } from '@/components/Footer';
 import { LandingPage } from '@/pages/LandingPage';
 import { DashboardPage } from '@/pages/DashboardPage';
@@ -45,9 +46,14 @@ function ProtectedRoute({ children }) {
 
 function AnimatedRoutes() {
   const location = useLocation();
+  const { user } = useAuth();
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-[#050505] text-[#FAF8F3] overflow-x-hidden">
+    <div
+      className={`relative flex min-h-screen flex-col overflow-x-hidden bg-[#050505] text-[#FAF8F3] ${
+        user ? 'pb-[calc(4rem_+_env(safe-area-inset-bottom))] md:pb-0' : ''
+      }`}
+    >
       <div className="bg-ambient-glow" />
       <div className="relative z-10 flex min-h-screen flex-col">
         <TopNav />
@@ -121,6 +127,7 @@ function AnimatedRoutes() {
         </main>
         <Footer />
       </div>
+      <MobileTabBar />
     </div>
   );
 }
