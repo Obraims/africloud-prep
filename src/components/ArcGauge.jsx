@@ -19,8 +19,9 @@ export function ArcGauge({ value, size = 220, thickness = 18, label, sublabel })
     return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${large} 1 ${end.x} ${end.y}`;
   };
 
-  const valueAngle = useMemo(() => startAngle + (value / 100) * (endAngle - startAngle), [value]);
-  const clamped = Math.max(0, Math.min(100, value));
+  const isRanked = typeof value === 'number' && !isNaN(value);
+  const clamped = isRanked ? Math.max(0, Math.min(100, value)) : 0;
+  const valueAngle = useMemo(() => startAngle + (clamped / 100) * (endAngle - startAngle), [clamped]);
   const trackEnd = endAngle;
 
   return (
@@ -37,20 +38,28 @@ export function ArcGauge({ value, size = 220, thickness = 18, label, sublabel })
           strokeLinecap="round"
           className="stroke-[#242424]"
         />
-        <path
-          d={describeArc(startAngle, valueAngle)}
-          fill="none"
-          strokeWidth={thickness}
-          strokeLinecap="round"
-          stroke="#007BA7"
-          style={{ transition: 'stroke-dasharray 0.8s ease-out' }}
-        />
+        {isRanked && (
+          <path
+            d={describeArc(startAngle, valueAngle)}
+            fill="none"
+            strokeWidth={thickness}
+            strokeLinecap="round"
+            stroke="#007BA7"
+            style={{ transition: 'stroke-dasharray 0.8s ease-out' }}
+          />
+        )}
       </svg>
       <div className="-mt-14 flex flex-col items-center">
-        <span className="text-6xl font-extrabold tracking-tight text-[#F8FAFC]">
-          {clamped}
-          <span className="text-2xl font-bold text-[#007BA7]">%</span>
-        </span>
+        {isRanked ? (
+          <span className="text-6xl font-extrabold tracking-tight text-[#F8FAFC]">
+            {clamped}
+            <span className="text-2xl font-bold text-[#007BA7]">%</span>
+          </span>
+        ) : (
+          <span className="text-6xl font-extrabold tracking-tight text-slate-500">
+            —
+          </span>
+        )}
         {label && <span className="mt-1 text-sm font-semibold text-slate-300">{label}</span>}
         {sublabel && <span className="text-xs text-slate-400">{sublabel}</span>}
       </div>
