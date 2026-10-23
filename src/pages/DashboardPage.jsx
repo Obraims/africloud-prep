@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   Flame,
+  Target,
   TrendingUp,
 } from 'lucide-react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
@@ -242,7 +243,22 @@ export function DashboardPage() {
   }
 
   const readiness = calculateReadiness(attempts, domains);
-  const readinessScore = readiness.score || 0;
+  const readinessScore = readiness.total_answered >= 30 ? readiness.overall_accuracy : null;
+
+  const domainEntries = Object.values(readiness.domain_readiness || {});
+  let weakestDomainName = 'Governance';
+  let weakestDomainAccuracy = null;
+  domainEntries.forEach((d) => {
+    if (d.accuracy !== null && d.accuracy !== undefined) {
+      if (weakestDomainAccuracy === null || d.accuracy < weakestDomainAccuracy) {
+        weakestDomainAccuracy = d.accuracy;
+        weakestDomainName = d.name.replace('Describe ', '').replace('Azure ', '');
+        if (weakestDomainName.includes('Management')) weakestDomainName = 'Governance';
+      }
+    }
+  });
+  const weakestDomainPassed = weakestDomainAccuracy !== null && weakestDomainAccuracy >= 70;
+  const weakestDomainDisplay = weakestDomainAccuracy !== null ? `${weakestDomainAccuracy}% / 70%` : '— / 70%';
 
   const domainProgressList = domains.map((d) => {
     const domainId = d.id || d.domain_id;
@@ -358,20 +374,85 @@ export function DashboardPage() {
                   : readiness.gap_message || "Keep going — you're close"}
               </h2>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#007BA7]/40 bg-gradient-to-r from-[#FF007F] to-[#D6006B]/15 px-3 py-1 text-xs font-semibold text-[#007BA7]">
-              <TrendingUp className="h-3.5 w-3.5" /> +12% this week
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#007BA7]/40 bg-[#007BA7]/10 px-3 py-1 text-xs font-semibold text-[#007BA7]">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {readiness.is_exam_ready ? 'Exam Ready' : (readiness.total_answered >= 30 ? 'In Progress' : 'Unranked')}
             </span>
           </div>
 
-          <div className="mt-4 flex flex-1 flex-col items-center justify-center py-6">
-            <ArcGauge value={readinessScore} label="Readiness" sublabel="Est. pass probability" />
+          <div className="mt-4 flex flex-1 flex-col items-center justify-center py-4">
+            <ArcGauge
+              value={readinessScore}
+              label="Readiness"
+              sublabel={readiness.total_answered >= 30 ? 'Target: 80% over last 50' : 'Min. 30 questions required'}
+            />
+
+            {/* 3-Line Readiness Checklist */}
+            <div className="mt-4 w-full max-w-md space-y-2 rounded-xl border border-[#242424] bg-[#141414] p-3.5 text-xs">
+              <div className="flex items-center justify-between border-b border-[#202020] pb-2">
+                <span className="font-bold uppercase tracking-wider text-slate-400 text-[10px]">
+                  Readiness Rule Checklist
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  3 requirements
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-slate-300">
+                  {readiness.total_answered >= 30 ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-500 shrink-0">1</span>
+                  )}
+                  Questions answered (min. 30)
+                </span>
+                <span className={`font-mono font-bold ${readiness.total_answered >= 30 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {readiness.total_answered} / 30
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-slate-300">
+                  {readiness.total_answered >= 30 && readiness.overall_accuracy >= 80 ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-500 shrink-0">2</span>
+                  )}
+                  Overall accuracy (last 50, min. 80%)
+                </span>
+                <span className={`font-mono font-bold ${readiness.total_answered >= 30 && readiness.overall_accuracy >= 80 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {readiness.total_answered > 0 ? `${readiness.overall_accuracy}%` : '—'} / 80%
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-slate-300">
+                  {weakestDomainPassed ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-500 shrink-0">3</span>
+                  )}
+                  Weakest domain ({weakestDomainName}, min. 70%)
+                </span>
+                <span className={`font-mono font-bold ${weakestDomainPassed ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {weakestDomainDisplay}
+                </span>
+              </div>
+            </div>
+
+            {/* Dynamic Gap Line */}
+            <div className="mt-3 flex w-full max-w-md items-center gap-2 rounded-xl border border-[#007BA7]/30 bg-[#007BA7]/10 px-3.5 py-2.5 text-xs font-semibold text-[#007BA7]">
+              <Target className="h-4 w-4 shrink-0 text-[#007BA7]" />
+              <span>{readiness.gap_message}</span>
+            </div>
           </div>
 
           <div className="mt-2 grid grid-cols-3 gap-3 border-t border-[#242424] pt-5">
             <div>
               <p className="text-xs text-slate-400">Streak</p>
               <p className="mt-1 flex items-center gap-1.5 text-lg font-bold text-[#F8FAFC]">
-                <Flame className="h-4 w-4 text-orange-400" /> {streakDays} days
+                <Flame className="h-4 w-4 text-orange-400" /> {streakDays} {streakDays === 1 ? 'day' : 'days'}
               </p>
             </div>
             <div>
