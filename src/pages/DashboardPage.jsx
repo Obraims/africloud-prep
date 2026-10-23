@@ -14,6 +14,7 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import { ArcGauge } from '@/components/ArcGauge';
 import { useRouter } from '@/context/RouterContext';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { calculateReadiness } from '@/lib/readiness';
 
@@ -43,12 +44,12 @@ function DomainProgress({ name, weight, readiness, mastered, total }) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-bold text-[#F8FAFC] line-clamp-1">{name}</p>
-          <p className="text-xs text-slate-400">Exam weight {weight}</p>
+          <p className="text-sm font-bold text-[#101213] dark:text-[#F8FAFC] line-clamp-1">{name}</p>
+          <p className="text-xs text-[#5B666E] dark:text-slate-400">Exam weight {weight}</p>
         </div>
         <span className="text-2xl font-extrabold tracking-tight text-[#007BA7]">{readiness}%</span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-[#242424]">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-[#DDE3E8] dark:bg-[#242424]">
         <div
           className="h-full rounded-full bg-gradient-to-r from-[#FF007F] to-[#D6006B] transition-all duration-500"
           style={{ width: `${readiness}%` }}
@@ -65,17 +66,17 @@ function DashboardSkeleton() {
   return (
     <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6 animate-pulse">
       <div className="mb-8">
-        <div className="h-3 w-28 rounded bg-[#181818]" />
-        <div className="mt-3 h-8 w-64 rounded-lg bg-[#181818]" />
-        <div className="mt-2 h-4 w-96 rounded bg-[#181818]" />
+        <div className="h-3 w-28 rounded bg-slate-200 dark:bg-[#181818]" />
+        <div className="mt-3 h-8 w-64 rounded-lg bg-slate-200 dark:bg-[#181818]" />
+        <div className="mt-2 h-4 w-96 rounded bg-slate-200 dark:bg-[#181818]" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="bento-card md:col-span-2 h-80 bg-[#121212] border-[#242424]" />
-        <div className="bento-card h-80 bg-[#121212] border-[#242424]" />
-        <div className="bento-card md:col-span-2 h-64 bg-[#121212] border-[#242424]" />
-        <div className="bento-card h-64 bg-[#121212] border-[#242424]" />
-        <div className="bento-card md:col-span-3 h-48 bg-[#121212] border-[#242424]" />
+        <div className="bento-card md:col-span-2 h-80 border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212]" />
+        <div className="bento-card h-80 border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212]" />
+        <div className="bento-card md:col-span-2 h-64 border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212]" />
+        <div className="bento-card h-64 border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212]" />
+        <div className="bento-card md:col-span-3 h-48 border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212]" />
       </div>
     </div>
   );
@@ -84,6 +85,7 @@ function DashboardSkeleton() {
 export function DashboardPage() {
   const { navigate } = useRouter();
   const { user, profile } = useAuth();
+  const { resolvedTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [attempts, setAttempts] = useState([]);
   const [domains, setDomains] = useState(DEFAULT_DOMAINS);
@@ -347,10 +349,10 @@ export function DashboardPage() {
       {/* Header */}
       <motion.div variants={fadeUp} initial="hidden" animate="show" className="mb-8">
         <span className="eyebrow">Readiness Tracker</span>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[#F8FAFC] sm:text-4xl">
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[#101213] dark:text-[#F8FAFC] sm:text-4xl">
           Your AZ-900 readiness
         </h1>
-        <p className="mt-2 max-w-lg text-slate-400">
+        <p className="mt-2 max-w-lg text-[#5B666E] dark:text-slate-400">
           Updated after every quiz and review session. Aim for 80%+ before you book the exam.
         </p>
       </motion.div>
@@ -367,7 +369,7 @@ export function DashboardPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="eyebrow">Overall readiness</p>
-              <h2 className="mt-1 text-xl font-bold text-[#F8FAFC]">
+              <h2 className="mt-1 text-xl font-bold text-[#101213] dark:text-[#F8FAFC]">
                 {readiness.is_ready
                   ? 'Exam Ready! You are set to pass'
                   : readiness.gap_message || "Keep going — you're close"}
@@ -387,8 +389,8 @@ export function DashboardPage() {
             />
 
             {/* 3-Line Readiness Checklist */}
-            <div className="mt-4 w-full max-w-md space-y-2 rounded-xl border border-[#242424] bg-[#141414] p-3.5 text-xs">
-              <div className="flex items-center justify-between border-b border-[#202020] pb-2">
+            <div className="mt-4 w-full max-w-md space-y-2 rounded-xl border border-[#DDE3E8] bg-[#F6F8FA] dark:border-[#242424] dark:bg-[#141414] p-3.5 text-xs">
+              <div className="flex items-center justify-between border-b border-[#DDE3E8] dark:border-[#202020] pb-2">
                 <span className="font-bold uppercase tracking-wider text-slate-400 text-[10px]">
                   Readiness Rule Checklist
                 </span>
@@ -398,7 +400,7 @@ export function DashboardPage() {
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-slate-300">
+                <span className="flex items-center gap-2 text-[#101213] dark:text-slate-300">
                   {readiness.total_answered >= 30 ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                   ) : (
@@ -412,7 +414,7 @@ export function DashboardPage() {
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-slate-300">
+                <span className="flex items-center gap-2 text-[#101213] dark:text-slate-300">
                   {readiness.total_answered >= 30 && readiness.overall_accuracy >= 80 ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                   ) : (
@@ -426,7 +428,7 @@ export function DashboardPage() {
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-slate-300">
+                <span className="flex items-center gap-2 text-[#101213] dark:text-slate-300">
                   {weakestDomainPassed ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                   ) : (
@@ -447,22 +449,22 @@ export function DashboardPage() {
             </div>
           </div>
 
-          <div className="mt-2 grid grid-cols-3 gap-3 border-t border-[#242424] pt-5">
+          <div className="mt-2 grid grid-cols-3 gap-3 border-t border-[#DDE3E8] dark:border-[#242424] pt-5">
             <div>
-              <p className="text-xs text-slate-400">Streak</p>
-              <p className="mt-1 flex items-center gap-1.5 text-lg font-bold text-[#F8FAFC]">
+              <p className="text-xs text-[#5B666E] dark:text-slate-400">Streak</p>
+              <p className="mt-1 flex items-center gap-1.5 text-lg font-bold text-[#101213] dark:text-[#F8FAFC]">
                 <Flame className="h-4 w-4 text-orange-400" /> {streakDays} {streakDays === 1 ? 'day' : 'days'}
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">This week</p>
-              <p className="mt-1 flex items-center gap-1.5 text-lg font-bold text-[#F8FAFC]">
+              <p className="text-xs text-[#5B666E] dark:text-slate-400">This week</p>
+              <p className="mt-1 flex items-center gap-1.5 text-lg font-bold text-[#101213] dark:text-[#F8FAFC]">
                 <Clock className="h-4 w-4 text-[#007BA7]" /> {hoursThisWeek}
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">Topics</p>
-              <p className="mt-1 flex items-center gap-1.5 text-lg font-bold text-[#F8FAFC]">
+              <p className="text-xs text-[#5B666E] dark:text-slate-400">Topics</p>
+              <p className="mt-1 flex items-center gap-1.5 text-lg font-bold text-[#101213] dark:text-[#F8FAFC]">
                 <CheckCircle2 className="h-4 w-4 text-[#007BA7]" /> {totalMasteredTopics}/
                 {totalTopicCount}
               </p>
@@ -481,10 +483,10 @@ export function DashboardPage() {
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#FF007F]">
               Next best action
             </p>
-            <h3 className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-[#F8FAFC]">
+            <h3 className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-[#101213] dark:text-[#F8FAFC]">
               {nextAction.title}
             </h3>
-            <div className="mt-3 flex items-center gap-2 text-sm text-slate-300">
+            <div className="mt-3 flex items-center gap-2 text-sm text-[#5B666E] dark:text-slate-300">
               <Clock className="h-4 w-4 text-[#FF007F]" /> {nextAction.minutes} min ·{' '}
               {nextAction.domain}
             </div>
@@ -506,7 +508,7 @@ export function DashboardPage() {
         >
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4.5 w-4.5 text-[#007BA7]" />
-            <h2 className="text-lg font-bold text-[#F8FAFC]">Per-domain progress</h2>
+            <h2 className="text-lg font-bold text-[#101213] dark:text-[#F8FAFC]">Per-domain progress</h2>
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
             {domainProgressList.map((d) => (
@@ -524,9 +526,9 @@ export function DashboardPage() {
         >
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4.5 w-4.5 text-[#007BA7]" />
-            <h2 className="text-lg font-bold text-[#F8FAFC]">Study minutes</h2>
+            <h2 className="text-lg font-bold text-[#101213] dark:text-[#F8FAFC]">Study minutes</h2>
           </div>
-          <p className="mt-1 text-xs text-slate-400">Last 7 days</p>
+          <p className="mt-1 text-xs text-[#5B666E] dark:text-slate-400">Last 7 days</p>
           <div className="mt-3 h-40 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={WEEKLY_ACTIVITY} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
@@ -534,7 +536,7 @@ export function DashboardPage() {
                   dataKey="day"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tick={{ fontSize: 11, fill: resolvedTheme === 'dark' ? '#94a3b8' : '#5B666E' }}
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(0, 123, 167, 0.12)' }}
@@ -563,13 +565,13 @@ export function DashboardPage() {
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <BookOpen className="h-4.5 w-4.5 text-[#007BA7]" />
-              <h2 className="text-lg font-bold text-[#F8FAFC]">Personal study plan</h2>
+              <h2 className="text-lg font-bold text-[#101213] dark:text-[#F8FAFC]">Personal study plan</h2>
             </div>
             <span className="text-xs font-semibold text-[#FF007F]">
               {studyPlanItems.length} items today
             </span>
           </div>
-          <ul className="divide-y divide-[#242424]">
+          <ul className="divide-y divide-[#DDE3E8] dark:divide-[#242424]">
             {studyPlanItems.map((s) => (
               <li
                 key={s.id}
@@ -581,20 +583,20 @@ export function DashboardPage() {
                     className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
                       s.done
                         ? 'bg-gradient-to-r from-[#FF007F] to-[#D6006B] text-white'
-                        : 'border-2 border-[#242424] text-transparent group-hover:border-[#FF007F]'
+                        : 'border-2 border-[#DDE3E8] dark:border-[#242424] text-transparent group-hover:border-[#FF007F]'
                     }`}
                   >
                     <CheckCircle2 className="h-4 w-4" />
                   </span>
                   <span
                     className={`text-sm font-medium ${
-                      s.done ? 'text-slate-500 line-through' : 'text-[#F8FAFC]'
+                      s.done ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-[#101213] dark:text-[#F8FAFC]'
                     }`}
                   >
                     {s.title}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-slate-400">
+                <div className="flex items-center gap-3 text-xs text-[#5B666E] dark:text-slate-400">
                   <span className="hidden sm:inline">{s.domain}</span>
                   <span className="inline-flex items-center gap-1 text-[#007BA7]">
                     <Clock className="h-3.5 w-3.5" /> {s.minutes}m

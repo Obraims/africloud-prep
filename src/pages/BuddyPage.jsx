@@ -520,7 +520,7 @@ export function BuddyPage() {
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-[#F8FAFC]">
+              <h1 className="text-xl font-bold tracking-tight text-[#101213] dark:text-[#F8FAFC]">
                 AfriCloud Prep Study Buddy
               </h1>
               <span
@@ -535,7 +535,7 @@ export function BuddyPage() {
                 {isGeminiConfigured() ? 'AfriCloud AI Live' : isSupabaseConfigured() ? 'Cloud Sync' : 'Offline Ready'}
               </span>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[#5B666E] dark:text-slate-400">
               Kenyan analogies for AZ-900 with interactive practice checks
             </p>
           </div>
@@ -543,7 +543,7 @@ export function BuddyPage() {
 
         {/* Controls: Language selector & Clear chat */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-xl border border-[#242424] bg-[#121212] p-1">
+          <div className="flex items-center gap-1 rounded-xl border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212] p-1">
             {languages.map((l) => (
               <button
                 key={l}
@@ -570,7 +570,7 @@ export function BuddyPage() {
           <button
             onClick={clearChat}
             title="Reset conversation"
-            className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#242424] bg-[#121212] text-slate-400 hover:text-[#FF007F] hover:border-[#FF007F]/40 transition-colors"
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#DDE3E8] bg-white text-slate-500 hover:text-[#FF007F] hover:border-[#FF007F]/40 dark:border-[#242424] dark:bg-[#121212] dark:text-slate-400 transition-colors"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -578,7 +578,7 @@ export function BuddyPage() {
       </div>
 
       {/* Chat Area */}
-      <div className="bento-card flex h-[580px] flex-col overflow-hidden p-0 border-[#242424] bg-[#121212]">
+      <div className="bento-card flex h-[580px] flex-col overflow-hidden p-0 border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212]">
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-5 scrollbar-thin">
           {messages.map((m) => {
             const isUser = m.role === 'user';
@@ -593,9 +593,9 @@ export function BuddyPage() {
                   key={m.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="rounded-2xl border border-[#007BA7]/40 bg-[#0a1218] p-4 text-[#F8FAFC] shadow-lg"
+                  className="rounded-2xl border border-[#007BA7]/30 bg-[#EEF7FC] p-4 text-[#101213] shadow-md dark:border-[#007BA7]/40 dark:bg-[#0a1218] dark:text-[#F8FAFC]"
                 >
-                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-[#1f2d3a]">
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-[#DDE3E8] dark:border-[#1f2d3a]">
                     <div className="flex items-center gap-2">
                       <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#007BA7] text-white">
                         <Target className="h-3.5 w-3.5" />
@@ -604,7 +604,7 @@ export function BuddyPage() {
                         Practice Check: {q.objective || q.topic_id || 'Azure Concept'}
                       </span>
                     </div>
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-[11px] text-[#5B666E] dark:text-slate-400">
                       Difficulty:{' '}
                       {q.difficulty === 1
                         ? 'Beginner'
@@ -614,7 +614,7 @@ export function BuddyPage() {
                     </span>
                   </div>
 
-                  <p className="mb-3 text-sm font-semibold leading-relaxed text-[#F8FAFC]">
+                  <p className="mb-3 text-sm font-semibold leading-relaxed text-[#101213] dark:text-[#F8FAFC]">
                     {q.question}
                   </p>
 
@@ -632,7 +632,7 @@ export function BuddyPage() {
                         } else if (isSelected) {
                           btnClass = 'border-[#FF007F] bg-[#FF007F]/15 text-rose-200 font-bold';
                         } else {
-                          btnClass = 'border-[#1f2428] bg-[#0c1014] text-slate-500 opacity-60';
+                          btnClass = 'border-[#DDE3E8] bg-slate-100 text-[#5B666E] opacity-60 dark:border-[#1f2428] dark:bg-[#0c1014] dark:text-slate-500';
                         }
                       }
 
@@ -643,7 +643,7 @@ export function BuddyPage() {
                           onClick={() => handleAnswerQuiz(m.id, q, optIdx)}
                           className={`flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left text-xs transition-all ${btnClass}`}
                         >
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[#333] text-[10px] font-bold">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[#DDE3E8] text-[#5B666E] dark:border-[#333] dark:text-slate-300 text-[10px] font-bold">
                             {String.fromCharCode(65 + optIdx)}
                           </span>
                           <span className="flex-1 leading-normal">{opt}</span>
@@ -662,14 +662,14 @@ export function BuddyPage() {
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
-                      className="rounded-xl border border-[#1f2d3a] bg-[#121820] p-3 text-xs"
+                      className="rounded-xl border border-[#DDE3E8] bg-white p-3 text-xs dark:border-[#1f2d3a] dark:bg-[#121820]"
                     >
-                      <p className="font-semibold text-white mb-1">
+                      <p className="font-semibold text-[#101213] dark:text-white mb-1">
                         {m.selectedOption === q.answerIndex
                           ? '🎉 Safi sana! Correct.'
                           : '💡 Why right, why wrong:'}
                       </p>
-                      <p className="text-slate-300 leading-relaxed mb-2">{q.explanation}</p>
+                      <p className="text-[#333] dark:text-slate-300 leading-relaxed mb-2">{q.explanation}</p>
                       {q.wrongExplanations &&
                         m.selectedOption !== q.answerIndex &&
                         q.wrongExplanations[m.selectedOption] && (
@@ -678,7 +678,7 @@ export function BuddyPage() {
                             {q.wrongExplanations[m.selectedOption]}
                           </p>
                         )}
-                      <div className="flex items-center justify-between pt-2 border-t border-[#223242]">
+                      <div className="flex items-center justify-between pt-2 border-t border-[#DDE3E8] dark:border-[#223242]">
                         <span className="text-[11px] text-slate-400">
                           Recorded to your readiness score
                         </span>
@@ -707,7 +707,7 @@ export function BuddyPage() {
                     className={`rounded-2xl p-4 text-sm leading-relaxed ${
                       isUser
                         ? 'bg-[#007BA7] text-white font-medium self-end'
-                        : 'border border-[#242424] bg-[#181818] text-[#F8FAFC] whitespace-pre-line'
+                        : 'border border-[#DDE3E8] bg-[#F6F8FA] text-[#101213] dark:border-[#242424] dark:bg-[#181818] dark:text-[#F8FAFC] whitespace-pre-line'
                     }`}
                   >
                     {m.text}
@@ -734,7 +734,7 @@ export function BuddyPage() {
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#007BA7]/20 text-[#007BA7]">
                 <Bot className="h-4 w-4" />
               </span>
-              <div className="rounded-2xl border border-[#242424] bg-[#181818] px-4 py-3 text-xs text-slate-400">
+              <div className="rounded-2xl border border-[#DDE3E8] bg-[#F6F8FA] px-4 py-3 text-xs text-[#5B666E] dark:border-[#242424] dark:bg-[#181818] dark:text-slate-400">
                 Your Study Buddy is preparing your Kenyan analogy in {lang}...
               </div>
             </div>
@@ -742,7 +742,7 @@ export function BuddyPage() {
         </div>
 
         {/* Quick prompt suggestions */}
-        <div className="flex items-center gap-2 overflow-x-auto px-4 py-2 border-t border-[#202020] bg-[#0c0c0c] scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto px-4 py-2 border-t border-[#DDE3E8] bg-[#F0F4F8] dark:border-[#202020] dark:bg-[#0c0c0c] scrollbar-none">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
             Topics:
           </span>
@@ -750,7 +750,7 @@ export function BuddyPage() {
             <button
               key={idx}
               onClick={() => send(p.prompt)}
-              className="shrink-0 rounded-lg border border-[#242424] bg-[#141414] px-2.5 py-1 text-xs text-slate-300 hover:border-[#007BA7] hover:text-white transition-colors"
+              className="shrink-0 rounded-lg border border-[#DDE3E8] bg-white px-2.5 py-1 text-xs text-slate-700 hover:border-[#007BA7] hover:text-[#007BA7] dark:border-[#242424] dark:bg-[#141414] dark:text-slate-300 dark:hover:border-[#007BA7] dark:hover:text-white transition-colors"
             >
               {p.label}
             </button>
@@ -758,7 +758,7 @@ export function BuddyPage() {
         </div>
 
         {/* Input */}
-        <div className="border-t border-[#242424] p-3.5 bg-[#121212]">
+        <div className="border-t border-[#DDE3E8] p-3.5 bg-white dark:border-[#242424] dark:bg-[#121212]">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -771,7 +771,7 @@ export function BuddyPage() {
               placeholder={`Ask your Study Buddy in ${lang} (e.g. "Availability zones ni nini?")`}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              className="flex-1 rounded-xl border border-[#242424] bg-[#181818] px-4 py-2.5 text-sm text-[#F8FAFC] outline-none transition-colors focus:border-[#007BA7] focus:bg-[#202020]"
+              className="flex-1 rounded-xl border border-[#DDE3E8] bg-[#F6F8FA] px-4 py-2.5 text-sm text-[#101213] outline-none transition-colors focus:border-[#007BA7] dark:border-[#242424] dark:bg-[#181818] dark:text-[#F8FAFC] dark:focus:bg-[#202020]"
             />
             <button
               type="submit"

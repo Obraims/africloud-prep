@@ -153,12 +153,12 @@ export function QuizPage() {
     const pct = Math.round((score / questions.length) * 100);
     return (
       <div className="mx-auto max-w-xl px-5 py-12 text-center sm:px-6 sm:py-20">
-        <div className="bento-card border border-[#242424] bg-[#121212] p-8 sm:p-10">
+        <div className="bento-card border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212] p-8 sm:p-10">
           <span className="eyebrow">Quiz completed</span>
-          <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-[#F8FAFC]">
+          <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-[#101213] dark:text-[#F8FAFC]">
             You scored {score} of {questions.length} ({pct}%)
           </h2>
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm text-[#5B666E] dark:text-slate-400">
             {pct >= 80
               ? 'Excellent! You demonstrated strong mastery of these fundamentals.'
               : 'Keep practicing! Review missed concepts in flashcards to lift your score.'}
@@ -166,7 +166,7 @@ export function QuizPage() {
           <div className="mt-8 flex justify-center gap-3">
             <button
               onClick={restart}
-              className="flex items-center gap-2 rounded-xl border border-[#242424] bg-[#181818] px-5 py-3 text-sm font-semibold text-[#F8FAFC] transition-colors hover:border-[#007BA7] hover:bg-[#202020]"
+              className="flex items-center gap-2 rounded-xl border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#181818] px-5 py-3 text-sm font-semibold text-slate-700 dark:text-[#F8FAFC] transition-colors hover:border-[#007BA7]"
             >
               <RotateCcw className="h-4 w-4" /> Try again
             </button>
@@ -187,7 +187,7 @@ export function QuizPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <span className="eyebrow">{domainLabel}</span>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-[#5B666E] dark:text-slate-400">
             Question {index + 1} of {questions.length}
           </p>
         </div>
@@ -203,9 +203,9 @@ export function QuizPage() {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -12 }}
           transition={{ duration: 0.3 }}
-          className="bento-card border border-[#242424] bg-[#121212] p-6 sm:p-8"
+          className="bento-card border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212] p-6 sm:p-8"
         >
-          <h2 className="text-lg font-bold leading-relaxed text-[#F8FAFC] sm:text-xl">
+          <h2 className="text-lg font-bold leading-relaxed text-[#101213] dark:text-[#F8FAFC] sm:text-xl">
             {q.question}
           </h2>
 
@@ -214,15 +214,15 @@ export function QuizPage() {
               const isPicked = selected === i;
               const isAnswer = i === q.answerIndex;
               let style =
-                'border-[#242424] bg-[#181818] text-[#F8FAFC] hover:border-[#007BA7] hover:bg-[#202020]';
+                'border-[#DDE3E8] bg-white text-[#101213] hover:border-[#007BA7] hover:bg-slate-50 dark:border-[#242424] dark:bg-[#181818] dark:text-[#F8FAFC] dark:hover:bg-[#202020]';
 
               if (revealed) {
                 if (isAnswer) {
-                  style = 'border-emerald-500 bg-emerald-950/40 text-emerald-200 font-semibold';
+                  style = 'border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold dark:bg-emerald-950/40 dark:text-emerald-200';
                 } else if (isPicked) {
-                  style = 'border-[#FF007F] bg-[#FF007F]/15 text-[#FF007F] font-semibold';
+                  style = 'border-[#FF007F] bg-[#FF007F]/10 text-[#FF007F] font-semibold dark:bg-[#FF007F]/15';
                 } else {
-                  style = 'border-[#242424]/40 opacity-40';
+                  style = 'border-[#DDE3E8] text-[#5B666E] opacity-50 dark:border-[#242424]/40 dark:text-slate-400';
                 }
               }
 
@@ -252,13 +252,13 @@ export function QuizPage() {
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-6 rounded-xl border border-[#242424] bg-[#181818] p-4 text-sm"
+              className="mt-6 rounded-xl border border-[#DDE3E8] bg-[#F0F4F8] dark:border-[#242424] dark:bg-[#181818] p-4 text-sm"
             >
-              <div className="flex items-center gap-2 font-bold text-[#F8FAFC]">
+              <div className="flex items-center gap-2 font-bold text-[#101213] dark:text-[#F8FAFC]">
                 <Sparkles className="h-4 w-4 text-[#007BA7]" />
                 <span>Explanation</span>
               </div>
-              <p className="mt-2 text-xs leading-relaxed text-slate-300">{q.explanation}</p>
+              <p className="mt-2 text-xs leading-relaxed text-[#5B666E] dark:text-slate-300">{q.explanation}</p>
               {q.learnUrl && (
                 <a
                   href={q.learnUrl}
