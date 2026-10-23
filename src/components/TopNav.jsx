@@ -8,6 +8,7 @@ import { APP_NAME } from '@/config/brand';
 
 const navItems = [
   { label: 'Dashboard', route: 'dashboard' },
+  { label: 'Planner', route: 'planner' },
   { label: 'Quiz', route: 'quiz' },
   { label: 'Flashcards', route: 'flashcards' },
   { label: 'AI Buddy', route: 'buddy' },

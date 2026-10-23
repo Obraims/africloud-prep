@@ -9,6 +9,7 @@ import { MobileTabBar } from '@/components/MobileTabBar';
 import { Footer } from '@/components/Footer';
 import { LandingPage } from '@/pages/LandingPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { PlannerPage } from '@/pages/PlannerPage';
 import { AuthPage } from '@/pages/AuthPage';
 import { QuizPage } from '@/pages/QuizPage';
 import { FlashcardsPage } from '@/pages/FlashcardsPage';

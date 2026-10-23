@@ -1,4 +1,4 @@
-import { BookOpen, Brain, LayoutDashboard, MessageCircle } from 'lucide-react';
+import { BookOpen, Brain, Calendar, LayoutDashboard, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from '@/context/RouterContext';
 
@@ -20,7 +20,7 @@ export function MobileTabBar() {
       aria-label="Primary mobile navigation"
       className="fixed inset-x-0 bottom-0 z-50 border-t border-[#242424] bg-[#121212]/95 pb-safe-b backdrop-blur-xl md:hidden"
     >
-      <div className="mx-auto grid max-w-xl grid-cols-4">
+      <div className="mx-auto grid max-w-xl grid-cols-5">
         {tabs.map(({ label, route: tabRoute, Icon }) => {
           const isActive = route === tabRoute;
 
