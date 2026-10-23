@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -17,13 +18,27 @@ import { BuddyPage } from '@/pages/BuddyPage';
 import { APP_NAME } from '@/config/brand';
 
 function PageLoader() {
+  const [showSkip, setShowSkip] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShowSkip(true), 1000);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
-    <div className="flex min-h-[65vh] items-center justify-center bg-[#050505]">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-9 w-9 animate-spin rounded-full border-3 border-[#007BA7] border-t-transparent" />
+    <div className="flex min-h-[65vh] flex-col items-center justify-center bg-[#050505] px-4">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-3 border-[#007BA7] border-t-transparent shadow-cerulean" />
         <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">
           Loading {APP_NAME}...
         </span>
+        {showSkip && (
+          <a
+            href="/dashboard"
+            className="mt-2 rounded-xl border border-[#007BA7]/50 bg-[#007BA7]/20 px-3.5 py-1.5 text-xs font-bold text-[#007BA7] hover:bg-[#007BA7]/35 transition-all"
+          >
+            Click to enter Dashboard →
+          </a>
+        )}
       </div>
     </div>
   );

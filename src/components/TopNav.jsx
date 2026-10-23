@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, LogOut, ArrowRight, Download } from 'lucide-react';
+import { User, LogOut, ArrowRight, Download, Sparkles } from 'lucide-react';
 import { useRouter } from '@/context/RouterContext';
 import { useAuth } from '@/context/AuthContext';
 import { usePwa } from '@/context/PwaContext';
@@ -16,7 +16,7 @@ const navItems = [
 
 export function TopNav() {
   const { route, navigate } = useRouter();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, signInAsGuest } = useAuth();
   const { isInstalled, installApp } = usePwa();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
@@ -105,13 +105,26 @@ export function TopNav() {
               </button>
             </>
           ) : (
-            <button
-              onClick={() => navigate('auth')}
-              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#007BA7] to-[#FF007F] hover:from-[#005C8A] hover:to-[#D6006B] px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-[#007BA7]/30 hover:shadow-[#FF007F]/40 transition-all hover:scale-[1.02] active:scale-95"
-            >
-              <span>Sign In</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  if (signInAsGuest) await signInAsGuest();
+                  navigate('dashboard');
+                }}
+                className="hidden sm:flex items-center gap-1.5 rounded-xl border border-[#007BA7]/50 bg-[#007BA7]/15 hover:bg-[#007BA7]/30 px-3.5 py-2 text-xs font-bold text-[#007BA7] transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Demo Dashboard</span>
+              </button>
+
+              <button
+                onClick={() => navigate('auth')}
+                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#007BA7] to-[#FF007F] hover:from-[#005C8A] hover:to-[#D6006B] px-4 py-2 text-xs font-bold text-white shadow-lg shadow-[#007BA7]/30 hover:shadow-[#FF007F]/40 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <span>Sign In</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
           )}
         </div>
       </nav>

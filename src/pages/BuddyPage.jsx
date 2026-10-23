@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Bot, CheckCircle2, Send, Target, Trash2, XCircle } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { isGeminiConfigured, askGeminiStudyBuddy } from '@/lib/geminiClient';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from '@/context/RouterContext';
 import { seedQuestions } from '@/data/seedQuestions';
@@ -14,12 +15,28 @@ const langFlag = {
   Sheng: 'SH',
 };
 
-const INITIAL_GREETING = {
-  id: 'init-1',
-  role: 'ai',
-  text: 'Jambo! I am your AfriCloud Prep AZ-900 Study Buddy. Ask me any Azure concept and I will break it down using real-life Kenyan analogies — M-Pesa agents, matatus, SACCO locks, or county by-laws. You can chat in English, Kiswahili, or Sheng!\n\nTap any quick topic below or type your question to start.',
-  lang: 'English',
+const GREETINGS = {
+  English: {
+    id: 'init-1',
+    role: 'ai',
+    text: 'Jambo! I am your AfriCloud Prep AZ-900 Study Buddy. Ask me any Azure concept and I will break it down using real-life Kenyan analogies - M-Pesa agents, matatus, SACCO locks, or county by-laws. You can chat in English, Kiswahili, or Sheng!\n\nTap any quick topic below or type your question to start.',
+    lang: 'English',
+  },
+  Kiswahili: {
+    id: 'init-1',
+    role: 'ai',
+    text: 'Jambo! Mimi ni Study Buddy wako wa AfriCloud Prep kwa mtihani wa AZ-900. Niulize dhana yoyote ya Azure nami nitaifafanua kwa mifano halisi ya Kenya - mawakala wa M-Pesa, matatu, sefu za SACCO, au sheria za kaunti. Unaweza kuongea nami kwa Kiingereza, Kiswahili, au Sheng!\n\nBofya mada yoyote hapa chini au andika swali lako kuanza.',
+    lang: 'Kiswahili',
+  },
+  Sheng: {
+    id: 'init-1',
+    role: 'ai',
+    text: 'Niaje! Mimi ni Study Buddy wako wa AfriCloud Prep wa AZ-900. Niulize risto yoyote ya Azure nitakuwekea na ma-analogy za mtaani - ma-agent wa M-Pesa, matatu, SACCO locks, na ma-rule za county. Unaweza bonga nami in English, Kiswahili, ama Sheng!\n\nGonga topic yoyote hapo chini ama drop swali uanze kutesa.',
+    lang: 'Sheng',
+  },
 };
+
+const INITIAL_GREETING = GREETINGS.English;
 
 const SUGGESTED_PROMPTS = [
   {
@@ -315,6 +332,50 @@ export function BuddyPage() {
       }
     }
 
+    // 1. Live AfriCloud AI (Gemini client execution)
+    if (isGeminiConfigured()) {
+      try {
+        const replyText = await askGeminiStudyBuddy({
+          message: text,
+          language: lang,
+          learnerContext: user?.id ? `Learner user ${user.id}` : '',
+        });
+
+        if (replyText) {
+          const aiMsg = {
+            id: `a${Date.now()}`,
+            role: 'ai',
+            text: replyText,
+            lang,
+          };
+          const next = [...updated, aiMsg];
+          setMessages(next);
+          setTyping(false);
+
+          if (!isSupabaseConfigured()) {
+            saveLocalMessages(next);
+          } else if (user?.id) {
+            try {
+              await supabase.from('chat_messages').insert([
+                {
+                  user_id: user.id,
+                  role: 'ai',
+                  text: replyText,
+                  lang,
+                },
+              ]);
+            } catch (err) {
+              console.warn('Chat persistence notice:', err);
+            }
+          }
+          return;
+        }
+      } catch (geminiError) {
+        console.warn('Live Gemini AI query failed, falling back to edge/offline engine:', geminiError);
+      }
+    }
+
+    // 2. Supabase Edge Function fallback if deployed
     if (isSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.functions.invoke('buddy-chat', {
@@ -463,13 +524,15 @@ export function BuddyPage() {
                 AfriCloud Prep Study Buddy
               </h1>
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                  isSupabaseConfigured()
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                  isGeminiConfigured()
                     ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                    : 'border border-[#007BA7]/40 bg-[#007BA7]/10 text-[#007BA7]'
+                    : isSupabaseConfigured()
+                      ? 'border border-[#007BA7]/40 bg-[#007BA7]/10 text-[#007BA7]'
+                      : 'border border-slate-700 bg-slate-800 text-slate-300'
                 }`}
               >
-                {isSupabaseConfigured() ? 'Cloud Sync' : 'Local Demo'}
+                {isGeminiConfigured() ? 'AfriCloud AI Live' : isSupabaseConfigured() ? 'Cloud Sync' : 'Offline Ready'}
               </span>
             </div>
             <p className="text-xs text-slate-400">
@@ -484,7 +547,15 @@ export function BuddyPage() {
             {languages.map((l) => (
               <button
                 key={l}
-                onClick={() => setLang(l)}
+                onClick={() => {
+                setLang(l);
+                setMessages((prev) => {
+                  if (prev.length === 1 && prev[0].id === 'init-1') {
+                    return [GREETINGS[l] || GREETINGS.English];
+                  }
+                  return prev;
+                });
+              }}
                 className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
                   lang === l
                     ? 'bg-[#007BA7] text-white shadow-cerulean'

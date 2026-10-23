@@ -1,34 +1,81 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { loginWithFirebaseGoogle } from '@/lib/firebaseClient';
 
 const AuthContext = createContext(null);
 
 const DEMO_USER_KEY = 'africloud_prep_demo_user';
 const DEMO_PROFILE_KEY = 'africloud_prep_demo_profile';
 
+const DEFAULT_GUEST_PROFILE = {
+  id: 'guest-amina-kimani',
+  email: 'amina.kimani@africloud.dev',
+  display_name: 'Amina Kimani',
+  exam_date: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  daily_hours: 1.5,
+  target_score: 80,
+  streak_days: 3,
+};
+
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(null);
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Synchronous initial restore from localStorage so there is ZERO spinner on page refresh
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem(DEMO_USER_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [profile, setProfile] = useState(() => {
+    try {
+      const saved = localStorage.getItem(DEMO_PROFILE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [session, setSession] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem(DEMO_USER_KEY);
+      return savedUser ? { user: JSON.parse(savedUser), access_token: 'local-token' } : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // If local user is already restored, loading starts at false!
+  const [loading, setLoading] = useState(() => {
+    try {
+      return !localStorage.getItem(DEMO_USER_KEY);
+    } catch {
+      return false;
+    }
+  });
+
   const isConfigured = isSupabaseConfigured();
 
   const fetchProfile = async (userId, userEmail, userMeta) => {
     try {
-      const { data, error } = await supabase
+      // 2-second timeout guard on profile fetch so it NEVER hangs
+      const fetchPromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        console.warn('Error fetching profile:', error.message);
-      }
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 2000)
+      );
+
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (data) {
         setProfile(data);
+        localStorage.setItem(DEMO_PROFILE_KEY, JSON.stringify(data));
       } else {
-        // Create initial profile if missing
         const defaultProfile = {
           id: userId,
           email: userEmail,
@@ -38,63 +85,74 @@ export function AuthProvider({ children }) {
           target_score: 80,
           streak_days: 1,
         };
-        const { data: created } = await supabase
-          .from('profiles')
-          .upsert(defaultProfile)
-          .select()
-          .maybeSingle();
-        setProfile(created || defaultProfile);
+        setProfile(defaultProfile);
+        localStorage.setItem(DEMO_PROFILE_KEY, JSON.stringify(defaultProfile));
+        supabase.from('profiles').upsert(defaultProfile).catch(() => {});
       }
     } catch (err) {
-      console.warn('Profile fetch exception:', err);
+      console.warn('Profile fetch handled gracefully:', err);
+      // Fallback to local profile or default
+      if (!profile) {
+        const fallback = {
+          id: userId,
+          email: userEmail,
+          display_name: userMeta?.display_name || userEmail?.split('@')[0] || 'Learner',
+          exam_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          daily_hours: 1.5,
+          target_score: 80,
+          streak_days: 1,
+        };
+        setProfile(fallback);
+      }
     }
   };
 
   useEffect(() => {
     let mounted = true;
 
-    // If Supabase is not configured with live credentials, use local storage session
+    // Hard safety timeout: loader MUST dismiss within 600ms no matter what
+    const safetyTimer = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 600);
+
     if (!isConfigured) {
-      try {
-        const savedUserStr = localStorage.getItem(DEMO_USER_KEY);
-        const savedProfileStr = localStorage.getItem(DEMO_PROFILE_KEY);
-        if (savedUserStr) {
-          const parsedUser = JSON.parse(savedUserStr);
-          setUser(parsedUser);
-          setSession({ user: parsedUser, access_token: 'demo-access-token' });
-          if (savedProfileStr) {
-            setProfile(JSON.parse(savedProfileStr));
-          }
-        }
-      } catch (err) {
-        console.warn('Local session restore warning:', err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
+      setLoading(false);
+      clearTimeout(safetyTimer);
       return;
     }
 
-    // Live Supabase authentication
+    // Check remote Supabase session
     supabase.auth
       .getSession()
       .then(({ data: { session: currentSession } }) => {
         if (!mounted) return;
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
         if (currentSession?.user) {
+          setSession(currentSession);
+          setUser(currentSession.user);
+          localStorage.setItem(DEMO_USER_KEY, JSON.stringify(currentSession.user));
           fetchProfile(
             currentSession.user.id,
             currentSession.user.email,
             currentSession.user.user_metadata
-          ).finally(() => {
-            if (mounted) setLoading(false);
-          });
+          );
         } else {
-          setLoading(false);
+          // If no remote session, check if we have a valid guest session in localStorage
+          try {
+            const saved = localStorage.getItem(DEMO_USER_KEY);
+            if (saved) {
+              const u = JSON.parse(saved);
+              setUser(u);
+              setSession({ user: u, access_token: 'demo-token' });
+            }
+          } catch (e) {
+            console.warn('Local check notice:', e);
+          }
         }
       })
       .catch((err) => {
-        console.warn('Session fetch notice:', err);
+        console.warn('Supabase getSession notice:', err);
+      })
+      .finally(() => {
         if (mounted) setLoading(false);
       });
 
@@ -103,40 +161,49 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!mounted) return;
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
       if (newSession?.user) {
-        await fetchProfile(
+        setSession(newSession);
+        setUser(newSession.user);
+        localStorage.setItem(DEMO_USER_KEY, JSON.stringify(newSession.user));
+        fetchProfile(
           newSession.user.id,
           newSession.user.email,
           newSession.user.user_metadata
         );
-      } else {
-        setProfile(null);
       }
       setLoading(false);
     });
 
     return () => {
       mounted = false;
+      clearTimeout(safetyTimer);
       subscription?.unsubscribe();
     };
   }, [isConfigured]);
 
-  const signIn = async (email, password) => {
-    if (!isConfigured) {
-      const displayName = email.split('@')[0];
-      const demoUser = {
-        id: 'demo-learner-user',
-        email,
-        user_metadata: { display_name: displayName },
-      };
-      const demoSession = { user: demoUser, access_token: 'demo-token' };
+  const signInWithGoogle = async () => {
+    try {
+      const googleUser = await loginWithFirebaseGoogle();
+      if (!googleUser) return null;
 
-      let demoProfile = {
-        id: demoUser.id,
-        email,
-        display_name: displayName,
+      const appUser = {
+        id: googleUser.uid,
+        email: googleUser.email,
+        user_metadata: {
+          display_name: googleUser.displayName || googleUser.email?.split('@')[0] || 'Learner',
+          avatar_url: googleUser.photoURL || null,
+        },
+      };
+
+      const appSession = {
+        user: appUser,
+        access_token: await googleUser.getIdToken().catch(() => 'google-token'),
+      };
+
+      let userProfile = {
+        id: appUser.id,
+        email: appUser.email,
+        display_name: appUser.user_metadata.display_name,
         exam_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         daily_hours: 1.5,
         target_score: 80,
@@ -144,35 +211,124 @@ export function AuthProvider({ children }) {
       };
 
       try {
-        const storedProfile = localStorage.getItem(DEMO_PROFILE_KEY);
-        if (storedProfile) {
-          demoProfile = { ...demoProfile, ...JSON.parse(storedProfile), email };
-        }
+        localStorage.setItem(DEMO_USER_KEY, JSON.stringify(appUser));
+        localStorage.setItem(DEMO_PROFILE_KEY, JSON.stringify(userProfile));
       } catch (e) {
-        console.warn('Profile read warning:', e);
+        console.warn('Storage save notice:', e);
       }
 
-      localStorage.setItem(DEMO_USER_KEY, JSON.stringify(demoUser));
-      localStorage.setItem(DEMO_PROFILE_KEY, JSON.stringify(demoProfile));
+      setUser(appUser);
+      setSession(appSession);
+      setProfile(userProfile);
+      setLoading(false);
 
-      setUser(demoUser);
-      setSession(demoSession);
-      setProfile(demoProfile);
-      return { user: demoUser, session: demoSession };
+      if (isConfigured) {
+        supabase.from('profiles').upsert(userProfile).catch(() => {});
+      }
+
+      return { user: appUser, session: appSession };
+    } catch (err) {
+      console.error('Google sign-in notice:', err);
+      throw err;
+    }
+  };
+
+  const signInAsGuest = async (emailOverride, nameOverride) => {
+    const guestEmail = emailOverride || 'amina.kimani@africloud.dev';
+    const guestName = nameOverride || (emailOverride ? emailOverride.split('@')[0] : 'Amina Kimani');
+    const guestUser = {
+      id: 'guest-' + (guestEmail.split('@')[0] || 'amina'),
+      email: guestEmail,
+      user_metadata: { display_name: guestName },
+    };
+    const guestSession = { user: guestUser, access_token: 'demo-guest-token' };
+
+    let guestProfile = {
+      id: guestUser.id,
+      email: guestEmail,
+      display_name: guestName,
+      exam_date: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      daily_hours: 1.5,
+      target_score: 80,
+      streak_days: 3,
+    };
+
+    try {
+      const stored = localStorage.getItem(DEMO_PROFILE_KEY);
+      if (stored) {
+        guestProfile = { ...guestProfile, ...JSON.parse(stored), email: guestEmail, display_name: guestName };
+      }
+    } catch (e) {
+      console.warn('Guest profile notice:', e);
     }
 
     try {
+      localStorage.setItem(DEMO_USER_KEY, JSON.stringify(guestUser));
+      localStorage.setItem(DEMO_PROFILE_KEY, JSON.stringify(guestProfile));
+    } catch (e) {
+      console.warn('Storage save notice:', e);
+    }
+
+    setUser(guestUser);
+    setSession(guestSession);
+    setProfile(guestProfile);
+    setLoading(false);
+    return { user: guestUser, session: guestSession };
+  };
+
+  const resetPassword = async (email) => {
+    if (!isConfigured) {
+      return { message: 'Demo mode: Password reset email simulated.' };
+    }
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth?reset=true`,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const resendConfirmation = async (email) => {
+    if (!isConfigured) {
+      return { message: 'Demo mode: Confirmation email simulated.' };
+    }
+    const { data, error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const signIn = async (email, password) => {
+    try {
       const res = await supabase.auth.signInWithPassword({ email, password });
-      if (res.error) throw res.error;
+      if (res.error) {
+        if (res.error.message?.toLowerCase().includes('email not confirmed')) {
+          const err = new Error('Email not confirmed. You can enter the Demo Dashboard directly or resend confirmation.');
+          err.code = 'email_not_confirmed';
+          throw err;
+        }
+        throw res.error;
+      }
+      if (res.data?.user) {
+        setUser(res.data.user);
+        setSession(res.data.session);
+        localStorage.setItem(DEMO_USER_KEY, JSON.stringify(res.data.user));
+      }
+      setLoading(false);
       return res.data;
     } catch (err) {
+      if (err.message?.toLowerCase().includes('email not confirmed')) {
+        err.code = 'email_not_confirmed';
+        throw err;
+      }
       if (
         err.name === 'TypeError' ||
         err.message?.includes('fetch') ||
         err.message?.includes('Failed to fetch')
       ) {
         throw new Error(
-          'Unable to reach Supabase database. Please check your internet connection or verify VITE_SUPABASE_URL in your .env file.'
+          'Unable to reach Supabase database. Please check your internet connection.'
         );
       }
       throw err;
@@ -180,35 +336,6 @@ export function AuthProvider({ children }) {
   };
 
   const signUp = async (email, password, { displayName, examDate, dailyHours } = {}) => {
-    if (!isConfigured) {
-      const name = displayName || email.split('@')[0];
-      const demoUser = {
-        id: `learner-${Date.now()}`,
-        email,
-        user_metadata: { display_name: name },
-      };
-      const demoSession = { user: demoUser, access_token: 'demo-token' };
-
-      const demoProfile = {
-        id: demoUser.id,
-        email,
-        display_name: name,
-        exam_date:
-          examDate || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        daily_hours: dailyHours ? Number(dailyHours) : 1.5,
-        target_score: 80,
-        streak_days: 1,
-      };
-
-      localStorage.setItem(DEMO_USER_KEY, JSON.stringify(demoUser));
-      localStorage.setItem(DEMO_PROFILE_KEY, JSON.stringify(demoProfile));
-
-      setUser(demoUser);
-      setSession(demoSession);
-      setProfile(demoProfile);
-      return { user: demoUser, session: demoSession };
-    }
-
     try {
       const res = await supabase.auth.signUp({
         email,
@@ -237,11 +364,14 @@ export function AuthProvider({ children }) {
         try {
           await supabase.from('profiles').upsert(newProfile);
         } catch (e) {
-          console.warn('Profile creation warning:', e);
+          console.warn('Profile creation notice:', e);
         }
         setProfile(newProfile);
+        localStorage.setItem(DEMO_USER_KEY, JSON.stringify(res.data.user));
+        localStorage.setItem(DEMO_PROFILE_KEY, JSON.stringify(newProfile));
       }
 
+      setLoading(false);
       return res.data;
     } catch (err) {
       if (
@@ -250,7 +380,7 @@ export function AuthProvider({ children }) {
         err.message?.includes('Failed to fetch')
       ) {
         throw new Error(
-          'Unable to reach Supabase database. Please check your internet connection or verify VITE_SUPABASE_URL in your .env file.'
+          'Unable to reach Supabase database. Please check your internet connection.'
         );
       }
       throw err;
@@ -258,16 +388,14 @@ export function AuthProvider({ children }) {
   };
 
   const signOut = async () => {
-    setLoading(true);
     try {
-      if (!isConfigured) {
-        localStorage.removeItem(DEMO_USER_KEY);
-        localStorage.removeItem(DEMO_PROFILE_KEY);
-      } else {
-        await supabase.auth.signOut();
+      localStorage.removeItem(DEMO_USER_KEY);
+      localStorage.removeItem(DEMO_PROFILE_KEY);
+      if (isConfigured) {
+        await supabase.auth.signOut().catch(() => {});
       }
     } catch (e) {
-      console.warn('Signout warning:', e);
+      console.warn('Signout notice:', e);
     } finally {
       setUser(null);
       setSession(null);
@@ -280,17 +408,10 @@ export function AuthProvider({ children }) {
     if (!user?.id) return;
     const merged = { ...profile, ...updates };
     setProfile(merged);
+    localStorage.setItem(DEMO_PROFILE_KEY, JSON.stringify(merged));
 
-    if (!isConfigured) {
-      localStorage.setItem(DEMO_PROFILE_KEY, JSON.stringify(merged));
-      return;
-    }
-
-    const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
-
-    if (error) {
-      console.warn('Error updating profile in Supabase:', error.message);
-      throw error;
+    if (isConfigured) {
+      supabase.from('profiles').update(updates).eq('id', user.id).catch(() => {});
     }
   };
 
@@ -305,6 +426,10 @@ export function AuthProvider({ children }) {
         signIn,
         signUp,
         signOut,
+        signInWithGoogle,
+        signInAsGuest,
+        resetPassword,
+        resendConfirmation,
         updateProfile,
       }}
     >

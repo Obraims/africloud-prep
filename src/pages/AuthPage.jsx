@@ -21,7 +21,7 @@ import { useRouter } from '@/context/RouterContext';
 import { APP_NAME } from '@/config/brand';
 
 export function AuthPage() {
-  const { signIn, signUp, isConfigured } = useAuth();
+  const { signIn, signUp, signInWithGoogle, signInAsGuest, resetPassword, resendConfirmation, isConfigured } = useAuth();
   const { navigate } = useRouter();
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
@@ -38,6 +38,8 @@ export function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isUnconfirmed, setIsUnconfirmed] = useState(false);
+  const [resending, setResending] = useState(false);
 
   // Strong password rule evaluations
   const passwordRules = {
@@ -61,6 +63,82 @@ export function AuthPage() {
   const strengthMeta = getStrengthMeta();
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+
+  const handleGoogleSignIn = async () => {
+    setSubmitting(true);
+    setErrorMsg('');
+    try {
+      if (signInWithGoogle) {
+        await signInWithGoogle();
+        setSuccessMsg('Signed in with Google! Entering dashboard...');
+        setTimeout(() => {
+          navigate('dashboard');
+        }, 300);
+      }
+    } catch (err) {
+      console.error('Google auth error:', err);
+      // If user closed the popup, don't show scary error
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setErrorMsg(err.message || 'Google sign-in was canceled or failed.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDemoAccess = async (emailToUse) => {
+    setSubmitting(true);
+    setErrorMsg('');
+    try {
+      await signInAsGuest(emailToUse || email || 'amina.kimani@africloud.dev');
+      setSuccessMsg('Entering Demo Dashboard...');
+      setTimeout(() => {
+        navigate('dashboard');
+      }, 300);
+    } catch (err) {
+      console.error('Demo sign-in error:', err);
+      setErrorMsg('Could not start demo session.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) {
+      setErrorMsg('Please enter your email address to resend confirmation.');
+      return;
+    }
+    setResending(true);
+    try {
+      await resendConfirmation(email);
+      setSuccessMsg(`Confirmation email resent to ${email}. Please check your inbox or spam folder.`);
+    } catch (err) {
+      console.error('Resend error:', err);
+      setErrorMsg(err.message || 'Failed to resend confirmation email.');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    if (!email) {
+      setErrorMsg('Please enter your email address.');
+      return;
+    }
+    setSubmitting(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    try {
+      await resetPassword(email);
+      setSuccessMsg(`Password recovery instructions sent to ${email}. Check your inbox.`);
+    } catch (err) {
+      console.error('Password reset error:', err);
+      setErrorMsg(err.message || 'Failed to send password recovery email.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -118,7 +196,13 @@ export function AuthPage() {
       }
     } catch (err) {
       console.error('Auth error:', err);
-      setErrorMsg(err.message || 'Authentication failed. Please check your credentials.');
+      if (err.code === 'email_not_confirmed' || err.message?.toLowerCase().includes('email not confirmed')) {
+        setIsUnconfirmed(true);
+        setErrorMsg('Email not confirmed yet. You can launch the Demo Dashboard directly or resend confirmation below.');
+      } else {
+        setIsUnconfirmed(false);
+        setErrorMsg(err.message || 'Authentication failed. Please check your credentials.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -151,12 +235,36 @@ export function AuthPage() {
 
         {/* Auth Card */}
         <div className="bento-card border border-[#242424] bg-[#121212] p-6 shadow-lifted sm:p-8">
+          {/* Quick Demo Dashboard Access Card */}
+          <div className="mb-6 rounded-2xl border border-[#007BA7]/40 bg-gradient-to-br from-[#007BA7]/20 via-[#121212] to-[#FF007F]/15 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-[#007BA7] to-[#FF007F] text-white shadow-cerulean">
+                  <Sparkles className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-[#F8FAFC]">Instant Demo Access</h3>
+                  <p className="text-xs text-slate-400">Explore AZ-900 Dashboard as Amina Kimani</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDemoAccess()}
+                disabled={submitting}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-[#007BA7] hover:bg-[#005C8A] px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:scale-[1.02] active:scale-95 whitespace-nowrap"
+              >
+                <span>Launch Demo</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
           {/* Mode Switcher Tabs */}
           <div className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-[#181818] p-1 border border-[#242424]">
             <button
               type="button"
               onClick={() => {
-                setMode('signin');
+                setMode('signin'); setIsUnconfirmed(false);
                 setErrorMsg('');
                 setSuccessMsg('');
               }}
@@ -171,7 +279,7 @@ export function AuthPage() {
             <button
               type="button"
               onClick={() => {
-                setMode('signup');
+                setMode('signup'); setIsUnconfirmed(false);
                 setErrorMsg('');
                 setSuccessMsg('');
               }}
@@ -192,10 +300,31 @@ export function AuthPage() {
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                className="mb-5 flex items-start gap-2.5 rounded-xl border border-[#FF007F] bg-[#FF007F]/15 p-3.5 text-xs font-medium text-[#FF007F]"
+                className="mb-5 flex flex-col gap-3 rounded-xl border border-[#FF007F] bg-[#FF007F]/15 p-3.5 text-xs font-medium text-[#FF007F]"
               >
-                <AlertCircle className="h-4 w-4 shrink-0 text-[#FF007F]" />
-                <span>{errorMsg}</span>
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-[#FF007F] mt-0.5" />
+                  <span className="leading-relaxed">{errorMsg}</span>
+                </div>
+                {isUnconfirmed && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleDemoAccess(email)}
+                      className="rounded-lg bg-[#007BA7] px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-[#005C8A]"
+                    >
+                      Bypass & Enter Demo Dashboard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResend}
+                      disabled={resending}
+                      className="rounded-lg border border-[#FF007F]/60 bg-[#FF007F]/20 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-[#FF007F]/30"
+                    >
+                      {resending ? 'Resending...' : 'Resend Confirmation Email'}
+                    </button>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -212,7 +341,98 @@ export function AuthPage() {
             )}
           </AnimatePresence>
 
-          <form onSubmit={handleSubmit} autoComplete="on" className="space-y-4">
+          {mode === 'forgot' ? (
+            <form onSubmit={handleForgotSubmit} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="auth-email-forgot"
+                  className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-400"
+                >
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                  <input
+                    id="auth-email-forgot"
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="Enter your registered email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-xl border border-[#242424] bg-[#181818] py-2.5 pl-10 pr-3.5 text-sm font-medium text-[#F8FAFC] outline-none transition-colors focus:border-[#007BA7] focus:bg-[#202020]"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#007BA7] to-[#FF007F] hover:from-[#005C8A] hover:to-[#D6006B] py-3 text-sm font-bold text-white shadow-sm transition-all hover:scale-[1.01] active:scale-98 disabled:opacity-70"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Sending recovery link...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Send Password Recovery Link</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('signin');
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                  }}
+                  className="text-xs font-bold text-slate-400 hover:text-[#F8FAFC]"
+                >
+                  ← Back to Sign In
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} autoComplete="on" className="space-y-4">
+            {/* Continue with Google */}
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={submitting}
+              className="flex w-full items-center justify-center gap-3 rounded-xl border border-[#2e2e2e] bg-[#181818] hover:bg-[#202020] hover:border-slate-500 py-2.5 text-xs font-bold text-[#F8FAFC] shadow-sm transition-all hover:scale-[1.01] active:scale-98 disabled:opacity-70"
+            >
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                />
+              </svg>
+              <span>{mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}</span>
+            </button>
+
+            <div className="relative my-3 flex items-center justify-center">
+              <div className="w-full border-t border-[#242424]" />
+              <span className="absolute bg-[#121212] px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                or continue with email
+              </span>
+            </div>
             {mode === 'signup' && (
               <div>
                 <label
@@ -267,6 +487,19 @@ export function AuthPage() {
                 className="mb-1.5 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400"
               >
                 <span>Password</span>
+                {mode === 'signin' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('forgot');
+                      setErrorMsg('');
+                      setSuccessMsg('');
+                    }}
+                    className="text-[11px] font-semibold text-[#007BA7] hover:underline normal-case tracking-normal"
+                  >
+                    Forgot password?
+                  </button>
+                )}
                 {mode === 'signup' && password && (
                   <span
                     className={`text-[10px] font-bold ${
@@ -514,6 +747,7 @@ export function AuthPage() {
               )}
             </button>
           </form>
+          )}
 
           <div className="mt-6 flex items-center justify-center gap-2 border-t border-[#242424] pt-4 text-center text-xs text-slate-400">
             <Sparkles className="h-3.5 w-3.5 text-[#007BA7]" />
