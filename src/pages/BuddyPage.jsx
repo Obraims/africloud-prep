@@ -17,7 +17,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
-import { isGeminiConfigured, askGeminiStudyBuddy } from '@/lib/geminiClient';
+import { isGeminiConfigured, streamGeminiStudyBuddy } from '@/lib/geminiClient';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from '@/context/RouterContext';
 import { seedQuestions } from '@/data/seedQuestions';
@@ -417,40 +417,74 @@ export function BuddyPage() {
       }
     }
 
+    // Pre-calculate recent history (last 6 messages) for compact requests
+    const recentHistory = messages
+      .filter((m) => m.role === 'user' || m.role === 'ai')
+      .slice(-6)
+      .map((m) => ({ role: m.role, text: m.text }));
+
+    const aiMsgId = `a${Date.now()}`;
+    let receivedFirstChunk = false;
+    let fullReply = '';
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
     try {
-      // 1. Live AfriCloud AI (Gemini client execution) with 20s timeout
+      // 1. Live AfriCloud AI streaming (Gemini client execution) with 20s timeout
       if (isGeminiConfigured()) {
         try {
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Request timed out')), 20000)
-          );
-
-          const fetchPromise = askGeminiStudyBuddy({
+          const streamPromise = streamGeminiStudyBuddy({
             message: text,
             language: lang,
+            history: recentHistory,
             learnerContext: user?.id ? `Learner user ${user.id}` : '',
+            signal: controller.signal,
+            onChunk: (chunk) => {
+              fullReply += chunk;
+              if (!receivedFirstChunk) {
+                receivedFirstChunk = true;
+                // Hide typing indicator immediately when first chunk arrives
+                setTyping(false);
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: aiMsgId,
+                    role: 'ai',
+                    text: fullReply,
+                    lang,
+                  },
+                ]);
+              } else {
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === aiMsgId ? { ...m, text: fullReply } : m))
+                );
+              }
+              scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            },
           });
 
-          const replyText = await Promise.race([fetchPromise, timeoutPromise]);
+          await streamPromise;
 
-          if (replyText) {
-            const aiMsg = {
-              id: `a${Date.now()}`,
-              role: 'ai',
-              text: replyText,
-              lang,
-            };
-            const next = [...updated, aiMsg];
-            setMessages(next);
-            if (!isSupabaseConfigured()) {
-              saveLocalMessages(next);
-            } else if (user?.id) {
+          if (fullReply.trim()) {
+            clearTimeout(timeoutId);
+            setMessages((prev) => {
+              const updatedList = prev.map((m) =>
+                m.id === aiMsgId ? { ...m, text: fullReply.trim() } : m
+              );
+              if (!isSupabaseConfigured()) {
+                saveLocalMessages(updatedList);
+              }
+              return updatedList;
+            });
+
+            if (user?.id && isSupabaseConfigured()) {
               try {
                 await supabase.from('chat_messages').insert([
                   {
                     user_id: user.id,
                     role: 'ai',
-                    text: replyText,
+                    text: fullReply.trim(),
                     lang,
                   },
                 ]);
@@ -461,12 +495,16 @@ export function BuddyPage() {
             return;
           }
         } catch (geminiErr) {
-          console.warn('Gemini client call failed, trying Edge Function fallback:', geminiErr);
+          console.warn('Gemini streaming call failed, trying Edge Function fallback:', geminiErr);
+          // If we received partial text before error, keep it or clean up
+          if (!receivedFirstChunk) {
+            setMessages((prev) => prev.filter((m) => m.id !== aiMsgId));
+          }
         }
       }
 
       // 2. Supabase Edge Function fallback with 20s timeout
-      if (isSupabaseConfigured()) {
+      if (isSupabaseConfigured() && !fullReply) {
         try {
           const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Edge function request timed out')), 20000)
@@ -476,6 +514,7 @@ export function BuddyPage() {
             body: {
               message: text,
               language: lang,
+              history: recentHistory,
               user_id: user?.id || null,
             },
           });
@@ -483,8 +522,10 @@ export function BuddyPage() {
           const { data: edgeData, error: edgeError } = await Promise.race([edgePromise, timeoutPromise]);
 
           if (!edgeError && edgeData?.reply) {
+            clearTimeout(timeoutId);
+            setTyping(false);
             const aiMsg = {
-              id: `a${Date.now()}`,
+              id: aiMsgId,
               role: 'ai',
               text: edgeData.reply,
               lang,
@@ -499,136 +540,139 @@ export function BuddyPage() {
         }
       }
 
-      // 3. Local Deterministic Analogy Engine fallback
-      const lower = text.toLowerCase().trim();
-      let replyText = '';
+      // 3. Local Deterministic Analogy Engine fallback (instantaneous)
+      if (!fullReply) {
+        clearTimeout(timeoutId);
+        setTyping(false);
+        const lower = text.toLowerCase().trim();
+        let replyText = '';
 
-      const isGreeting =
-        lower === 'hi' ||
-        lower === 'hello' ||
-        lower === 'hey' ||
-        lower.startsWith('hi ') ||
-        lower.startsWith('hello ') ||
-        lower.startsWith('hey ') ||
-        lower.includes('how are you') ||
-        lower.includes('habari') ||
-        lower.includes('sasa') ||
-        lower.includes('niaje') ||
-        lower.includes('mambo');
+        const isGreeting =
+          lower === 'hi' ||
+          lower === 'hello' ||
+          lower === 'hey' ||
+          lower.startsWith('hi ') ||
+          lower.startsWith('hello ') ||
+          lower.startsWith('hey ') ||
+          lower.includes('how are you') ||
+          lower.includes('habari') ||
+          lower.includes('sasa') ||
+          lower.includes('niaje') ||
+          lower.includes('mambo');
 
-      if (isGreeting) {
-        if (lang === 'Kiswahili') {
-          replyText =
-            'Jambo! Niko salama na tayari kukusaidia. Ni mada gani ya Azure ungependa tujifunze leo?';
-        } else if (lang === 'Sheng') {
-          replyText =
-            'Niaje! Niko fiti sana. Ni topic gani ya Azure ungependa tupige leo?';
+        if (isGreeting) {
+          if (lang === 'Kiswahili') {
+            replyText =
+              'Habari yako! Mimi ni Study Buddy wako wa AfriCloud Prep.\n\nTuko tayari kurahisisha dhana za mtihani wa Microsoft Azure (AZ-900) kwa mifano halisi ya Kenya.\n\nJe, kuna mada yoyote ya Azure ungependa tuanze nayo leo?';
+          } else if (lang === 'Sheng') {
+            replyText =
+              'Niaje msee! Mimi ni Study Buddy wako wa AfriCloud Prep.\n\nTuko hapa kumenya maneno ya Microsoft Azure AZ-900 kwa Sheng na mifano freshi ya mtaani.\n\nNi topic gani ya Azure unadai tuchambue kwanza leo?';
+          } else {
+            replyText =
+              'Hi! I am your AfriCloud Prep study buddy for AZ-900.\nWhat Azure topic would you like to cover today?';
+          }
+        } else if (
+          lower.includes('zone') ||
+          lower.includes('availability') ||
+          lower.includes('redundancy')
+        ) {
+          if (lang === 'Kiswahili') {
+            replyText =
+              'Availability Zone ni kama kuwa na maduka ya wakala wa M-Pesa kwenye vitongoji tofauti: Westlands, Kasarani, na Ngong.\n\nKila duka lina umeme, jenereta, na mtandao wake unaojitegemea. Iwapo eneo la Westlands litakosa umeme au mtandao, wateja wanaendelea kuhudumiwa bila tatizo kwenye matawi mengine.\n\nKwenye Azure, ukiweka mifumo yako kwenye Availability Zones tofauti ndani ya eneo moja, kituo kimoja cha data (datacenter) kikipata hitilafu, huduma zako zitaendelea kupatikana bila kukatika.\n\nJe, ungependa swali la kujipima ili kuona jinsi mtihani unavyouliza hili?';
+          } else if (lang === 'Sheng') {
+            replyText =
+              'Availability Zone ni kama ma-agent wa M-Pesa kwa mtaa tofauti: Westy, Rongai, na tao.\n\nAgent mmoja akishuka stima ama network ikilala, wateja wanavuka tu duka ya pili na mambo inaendelea mbele fiti.\n\nKwa Azure, uki-spread VMs zako across zones, datacenter moja ikilala, system yako inabaki hewani bila stress.\n\nUko ready tuchape swali la practice test tucheki kama umeshika?';
+          } else {
+            replyText =
+              'An Availability Zone is like having M-Pesa agent booths in separate neighborhoods - Westlands, Kasarani, and Ngong.\n\nEach booth has its own independent power, cooling, and fiber connection. If the Westlands branch loses power, customers simply walk over to Kasarani and continue transacting seamlessly.\n\nIn Azure, hosting your workloads across multiple Availability Zones ensures your application stays online even if an entire physical datacenter goes dark.\n\nReady to test your mastery with a practice check on this concept?';
+          }
+        } else if (
+          lower.includes('shared responsibility') ||
+          lower.includes('responsibility') ||
+          lower.includes('matatu')
+        ) {
+          if (lang === 'Kiswahili') {
+            replyText =
+              'Shared Responsibility Model ni kama kusafiri na matatu ya Super Metro:\n\nDereva na mmiliki wanawajibika na injini, breki, na petroli (miundombinu ya Microsoft). Lakini mkoba wako, simu yako, na jinsi unavyofunga mkanda ni jukumu lako mwenyewe (data na usalama wako).\n\nKwenye IaaS, unawajibika na mfumo (OS) na programu. Kwenye SaaS (kama Microsoft 365), Microsoft inabeba karibu kila kitu isipokuwa data na watumiaji wako.\n\nJe, ungependa swali la practice check kuona jinsi AZ-900 inavyouliza hili?';
+          } else if (lang === 'Sheng') {
+            replyText =
+              'Shared Responsibility Model ni kama kupanda nganya ya Super Metro:\n\nDere na dereva wanashughulikia gari, engine, na mafuta (hiyo ni kazi ya Microsoft). Lakini simu yako kwa mfuko na seatbelt yako ni jukumu lako mwenyewe (hiyo ni data na password zako).\n\nKwenye IaaS unajipanga na OS na apps. Kwenye SaaS kama Office 365, Microsoft inashughulikia kila kitu, wewe kazi yako ni data na ma-user wako.\n\nNikuwekee swali la practice uone kama umeshika risto?';
+          } else {
+            replyText =
+              'The Shared Responsibility Model is like commuting in a Nairobi matatu:\n\nThe SACCO and driver are responsible for the vehicle, engine health, tires, and fuel (the underlying cloud infrastructure managed by Microsoft). However, protecting your phone, handbag, and buckling your seatbelt is strictly your own responsibility (customer data, passwords, and access).\n\nIn IaaS you manage OS and apps; in SaaS (like Microsoft 365), Microsoft handles almost everything except your data and identities.\n\nWould you like a quick check question to see how the AZ-900 exam tests this?';
+          }
+        } else if (
+          lower.includes('capex') ||
+          lower.includes('opex') ||
+          lower.includes('cost') ||
+          lower.includes('spending')
+        ) {
+          if (lang === 'Kiswahili') {
+            replyText =
+              'CapEx (Capital Expenditure) ni kama kununua gari lako mwenyewe: unalipa pesa nyingi mwanzo, unalipia gereji, na bima hata kama halisafiri.\n\nOpEx (Operational Expenditure) ni kama kulipa nauli ya kila safari unaposafiri: unalipia tu huduma unayotumia kwa sasa bila gharama kubwa za mwanzo.\n\nWingu la Azure linafuata mtindo wa OpEx (consumption-based pricing).\n\nUngependa nijaribu swali la mtihani la AZ-900 kuhusu gharama hizi?';
+          } else if (lang === 'Sheng') {
+            replyText =
+              'CapEx ni kubuy gari yako cash: unatoa ganji mob upfront, kisha service na insurance ni juu yako hata gari ikikaa parking.\n\nOpEx ni kulipa fare ya matatu kila trip: unatoa doo ya ile safari umetumia tu bila deni kubwa ya kuanza.\n\nCloud kama Azure inatumia OpEx (consumption model) - unalipia tu kile unatumia kwa dakika au saa.\n\nNikugongee swali la practice uone vile exam huuliza hii kitu?';
+          } else {
+            replyText =
+              'CapEx (Capital Expenditure) is like buying a personal car upfront: significant initial cash outlay, plus ongoing maintenance costs even when parked.\n\nOpEx (Operational Expenditure) is like paying daily matatu bus fare: no massive upfront capital, and you only pay for the exact distance you travel.\n\nAzure cloud runs primarily on OpEx (pay-as-you-go consumption model).\n\nWould you like a sample AZ-900 practice check on CapEx vs OpEx?';
+          }
+        } else if (
+          lower.includes('storage') ||
+          lower.includes('tier') ||
+          lower.includes('blob') ||
+          lower.includes('archive')
+        ) {
+          if (lang === 'Kiswahili') {
+            replyText =
+              'Azure Blob Storage Tiers ni kama jinsi unavyoweka vyakula na stakabadhi nyumbani:\n\n1. Hot Tier: Meza ya kulia - chakula unachokula leo. Gharama ya kuhifadhi ni juu kidogo lakini kuipata ni haraka na nafuu.\n2. Cool Tier: Friji - unakula mara moja kwa wiki.\n3. Cold Tier: Kabati ya stoo - unakagua mara moja kwa mwezi.\n4. Archive Tier: Vyeti kwenye sefu ya benki - hufungui kwa miaka mingi. Gharama ya kuhifadhi ni nafuu sana, lakini ukihitaji inachukua masaa kadhaa kurejesha (rehydration).\n\nUngependa tupime hili kwa swali la mtihani?';
+          } else if (lang === 'Sheng') {
+            replyText =
+              'Blob Storage Tiers ni kama vile unavyoweka vitu zako za mtaa:\n\n1. Hot Tier: Mfuko wa koti - vitu unatumia kila dakika (kama simu na keys). Storage cost iko juu kiasi lakini kuichukua ni chapchap na free.\n2. Cool Tier: Droo ya meza - vitu unatumia mara moja kwa mwezi.\n3. Cold Tier: Sanduku ya kitanda - unacheki baada ya miezi kadhaa.\n4. Archive Tier: Vyeti kwa safe ya bank - haufungui kwa miaka. Bei ya storage ni cheeeap sana, lakini kurejesha huchukua masaa (rehydration).\n\nUko ready kwa practice check ya hii story?';
+          } else {
+            replyText =
+              'Azure Blob Storage access tiers are like how you store documents at home:\n\n1. Hot Tier: Your desk top - files accessed constantly. Higher storage cost, but lowest access fees.\n2. Cool Tier: Filing cabinet - accessed monthly (30-day minimum retention).\n3. Cold Tier: Closet storage - accessed rarely (90-day minimum retention).\n4. Archive Tier: Bank safety deposit box - stored for years (180-day minimum). Lowest storage cost, but retrieval takes several hours (rehydration).\n\nWould you like an AZ-900 exam practice check on storage tiers?';
+          }
         } else {
-          replyText =
-            'Hi! What Azure topic would you like to cover today?';
-        }
-      } else if (
-        lower.includes('zone') ||
-        lower.includes('availability') ||
-        lower.includes('datacenter') ||
-        lower.includes('m-pesa')
-      ) {
-        if (lang === 'Kiswahili') {
-          replyText =
-            'Availability Zone ni kama maduka tofauti ya wakala wa M-Pesa mtaani Kasarani, Westlands, na Ngong.\n\nKila duka liko kwenye jengo tofauti lenye stima na mtandao wake wa kujitegemea. Duka moja likikosa stima, wateja wanatembea mtaa wa pili na shughuli zinaendelea bila kusimama.\n\nVivyo hivyo, ukiweka servers zako kwenye Availability Zones mbili au tatu, datacenter moja ikizima, huduma yako haikati.\n\nUngependa tupime uelewa wako na swali la mtihani kuhusu hili?';
-        } else if (lang === 'Sheng') {
-          replyText =
-            'Availability Zone ni kama ma-agent wa M-Pesa kwa mtaa tofauti: Westy, Rongai, na tao.\n\nAgent mmoja akishuka stima ama network ikilala, wateja wanavuka tu duka ya pili na mambo inaendelea mbele fiti.\n\nKwa Azure, uki-spread VMs zako across zones, datacenter moja ikilala, system yako inabaki hewani bila stress.\n\nUko ready tuchape swali la practice test tucheki kama umeshika?';
-        } else {
-          replyText =
-            'An Availability Zone is like having M-Pesa agent booths in separate neighborhoods - Westlands, Kasarani, and Ngong.\n\nEach booth has its own independent power, cooling, and fiber connection. If the Westlands branch loses power, customers simply walk over to Kasarani and continue transacting seamlessly.\n\nIn Azure, hosting your workloads across multiple Availability Zones ensures your application stays online even if an entire physical datacenter goes dark.\n\nReady to test your mastery with a practice check on this concept?';
-        }
-      } else if (
-        lower.includes('shared responsibility') ||
-        lower.includes('responsibility') ||
-        lower.includes('matatu')
-      ) {
-        if (lang === 'Kiswahili') {
-          replyText =
-            'Shared Responsibility Model ni kama kusafiri na matatu ya Super Metro:\n\nDereva na mmiliki wanawajibika na injini, breki, na petroli (miundombinu ya Microsoft). Lakini mkoba wako, simu yako, na jinsi unavyofunga mkanda ni jukumu lako mwenyewe (data na usalama wako).\n\nKwenye IaaS, unawajibika na mfumo (OS) na programu. Kwenye SaaS (kama Microsoft 365), Microsoft inabeba karibu kila kitu isipokuwa data na watumiaji wako.\n\nJe, ungependa swali la practice check kuona jinsi AZ-900 inavyouliza hili?';
-        } else if (lang === 'Sheng') {
-          replyText =
-            'Shared Responsibility Model ni kama kupanda nganya ya Super Metro:\n\nDere na dereva wanashughulikia gari, engine, na mafuta (hiyo ni kazi ya Microsoft). Lakini simu yako kwa mfuko na seatbelt yako ni jukumu lako mwenyewe (hiyo ni data na password zako).\n\nKwenye IaaS unajipanga na OS na apps. Kwenye SaaS kama Office 365, Microsoft inashughulikia kila kitu, wewe kazi yako ni data na ma-user wako.\n\nNikuwekee swali la practice uone kama umeshika risto?';
-        } else {
-          replyText =
-            'The Shared Responsibility Model is like commuting in a Nairobi matatu:\n\nThe SACCO and driver are responsible for the vehicle, engine health, tires, and fuel (the underlying cloud infrastructure managed by Microsoft). However, protecting your phone, handbag, and buckling your seatbelt is strictly your own responsibility (customer data, passwords, and access).\n\nIn IaaS you manage OS and apps; in SaaS (like Microsoft 365), Microsoft handles almost everything except your data and identities.\n\nWould you like a quick check question to see how the AZ-900 exam tests this?';
-        }
-      } else if (
-        lower.includes('capex') ||
-        lower.includes('opex') ||
-        lower.includes('cost') ||
-        lower.includes('spending')
-      ) {
-        if (lang === 'Kiswahili') {
-          replyText =
-            'CapEx (Capital Expenditure) ni kama kununua gari lako mwenyewe: unalipa pesa nyingi mwanzo, unalipia gereji, na bima hata kama halisafiri.\n\nOpEx (Operational Expenditure) ni kama kulipa nauli ya kila safari unaposafiri: unalipia tu huduma unayotumia kwa sasa bila gharama kubwa za mwanzo.\n\nWingu la Azure linafuata mtindo wa OpEx (consumption-based pricing).\n\nUngependa nijaribu swali la mtihani la AZ-900 kuhusu gharama hizi?';
-        } else if (lang === 'Sheng') {
-          replyText =
-            'CapEx ni kubuy gari yako cash: unatoa ganji mob upfront, kisha service na insurance ni juu yako hata gari ikikaa parking.\n\nOpEx ni kulipa fare ya matatu kila trip: unatoa doo ya ile safari umetumia tu bila deni kubwa ya kuanza.\n\nCloud kama Azure inatumia OpEx (consumption model) - unalipia tu kile unatumia kwa dakika au saa.\n\nNikugongee swali la practice uone vile exam huuliza hii kitu?';
-        } else {
-          replyText =
-            'CapEx (Capital Expenditure) is like buying a personal car upfront: significant initial cash outlay, plus ongoing maintenance costs even when parked.\n\nOpEx (Operational Expenditure) is like paying daily matatu bus fare: no massive upfront capital, and you only pay for the exact distance you travel.\n\nAzure cloud runs primarily on OpEx (pay-as-you-go consumption model).\n\nWould you like a sample AZ-900 practice check on CapEx vs OpEx?';
-        }
-      } else if (
-        lower.includes('storage') ||
-        lower.includes('tier') ||
-        lower.includes('blob') ||
-        lower.includes('archive')
-      ) {
-        if (lang === 'Kiswahili') {
-          replyText =
-            'Azure Blob Storage Tiers ni kama jinsi unavyoweka vyakula na stakabadhi nyumbani:\n\n1. Hot Tier: Meza ya kulia - chakula unachokula leo. Gharama ya kuhifadhi ni juu kidogo lakini kuipata ni haraka na nafuu.\n2. Cool Tier: Friji - unakula mara moja kwa wiki.\n3. Cold Tier: Kabati ya stoo - unakagua mara moja kwa mwezi.\n4. Archive Tier: Vyeti kwenye sefu ya benki - hufungui kwa miaka mingi. Gharama ya kuhifadhi ni nafuu sana, lakini ukihitaji inachukua masaa kadhaa kurejesha (rehydration).\n\nUngependa tupime hili kwa swali la mtihani?';
-        } else if (lang === 'Sheng') {
-          replyText =
-            'Blob Storage Tiers ni kama vile unavyoweka vitu zako za mtaa:\n\n1. Hot Tier: Mfuko wa koti - vitu unatumia kila dakika (kama simu na keys). Storage cost iko juu kiasi lakini kuichukua ni chapchap na free.\n2. Cool Tier: Droo ya meza - vitu unatumia mara moja kwa mwezi.\n3. Cold Tier: Sanduku ya kitanda - unacheki baada ya miezi kadhaa.\n4. Archive Tier: Vyeti kwa safe ya bank - haufungui kwa miaka. Bei ya storage ni cheeeap sana, lakini kurejesha huchukua masaa (rehydration).\n\nUko ready kwa practice check ya hii story?';
-        } else {
-          replyText =
-            'Azure Blob Storage access tiers are like how you store documents at home:\n\n1. Hot Tier: Your desk top - files accessed constantly. Higher storage cost, but lowest access fees.\n2. Cool Tier: Filing cabinet - accessed monthly (30-day minimum retention).\n3. Cold Tier: Closet storage - accessed rarely (90-day minimum retention).\n4. Archive Tier: Bank safety deposit box - stored for years (180-day minimum). Lowest storage cost, but retrieval takes several hours (rehydration).\n\nWould you like an AZ-900 exam practice check on storage tiers?';
-        }
-      } else {
-        if (lang === 'Kiswahili') {
-          replyText =
-            'Huu ni msingi muhimu wa mtihani wa Microsoft Azure Fundamentals (AZ-900).\n\nFikiria ushirikiano wa chama au SACCO: Azure Policy ni sheria ndogo za kaunti ambazo kila mwanachama lazima afuate, naye Azure RBAC ni uamuzi wa nani amepewa funguo za kufungua sefu ya pesa.\n\nKwenye Azure, tunatumia Resource Groups kupanga miradi, na Management Groups kusimamia kampuni yenye subscriptions nyingi.\n\nSwali la kujipima: Chini ya Azure Governance, ni huduma gani inazuia rasilimali zisifutwe kimakosa: Azure Policy au Resource Locks?';
-        } else if (lang === 'Sheng') {
-          replyText =
-            'Hii risto ni ya nguvu sana kwenye mtihani wa AZ-900 Azure fundamentals.\n\nFikiria SACCO ya mtaa: Azure Policy ni zile sheria za county hall kila msee lazima afuate, lakini Azure RBAC ni kuchagua nani anashika funguo za safe ya ganji.\n\nKwa Azure, Resource Locks inazuia msee yeyote kufuta production database kimakosa hata akiwa admin.\n\nSwali la kujipima: Kuzuia mtu asifute subscription kimakosa, unatumia CanNotDelete lock ama ReadOnly lock?';
-        } else {
-          replyText =
-            'This concept is a core pillar of the Microsoft Azure Fundamentals (AZ-900) curriculum.\n\nThink of a SACCO office: Azure Policy enforces the county by-laws that every branch must follow, while Azure RBAC determines which staff members hold keys to specific offices.\n\nIn Azure, Resource Locks prevent accidental deletion, while Azure Policy enforces compliance standards across subscriptions.\n\nQuick check: Which Azure feature prevents accidental deletion of mission-critical production databases?';
-        }
-      }
-
-      if (replyText) {
-        const aiMsg = {
-          id: `a${Date.now()}`,
-          role: 'ai',
-          text: replyText,
-          lang,
-        };
-        const next = [...updated, aiMsg];
-        setMessages(next);
-        if (!isSupabaseConfigured()) {
-          saveLocalMessages(next);
-        } else if (user?.id) {
-          try {
-            supabase.from('chat_messages').insert([
-              {
-                user_id: user.id,
-                role: 'ai',
-                text: replyText,
-                lang,
-              },
-            ]);
-          } catch (e) {
-            console.warn('Could not persist AI reply:', e);
+          if (lang === 'Kiswahili') {
+            replyText =
+              'Huu ni msingi muhimu wa mtihani wa Microsoft Azure Fundamentals (AZ-900).\n\nFikiria ushirikiano wa chama au SACCO: Azure Policy ni sheria ndogo za kaunti ambazo kila mwanachama lazima afuate, naye Azure RBAC ni uamuzi wa nani amepewa funguo za kufungua sefu ya pesa.\n\nKwenye Azure, tunatumia Resource Groups kupanga miradi, na Management Groups kusimamia kampuni yenye subscriptions nyingi.\n\nSwali la kujipima: Chini ya Azure Governance, ni huduma gani inazuia rasilimali zisifutwe kimakosa: Azure Policy au Resource Locks?';
+          } else if (lang === 'Sheng') {
+            replyText =
+              'Hii risto ni ya nguvu sana kwenye mtihani wa AZ-900 Azure fundamentals.\n\nFikiria SACCO ya mtaa: Azure Policy ni zile sheria za county hall kila msee lazima afuate, lakini Azure RBAC ni kuchagua nani anashika funguo za safe ya ganji.\n\nKwa Azure, Resource Locks inazuia msee yeyote kufuta production database kimakosa hata akiwa admin.\n\nSwali la kujipima: Kuzuia mtu asifute subscription kimakosa, unatumia CanNotDelete lock ama ReadOnly lock?';
+          } else {
+            replyText =
+              'This concept is a core pillar of the Microsoft Azure Fundamentals (AZ-900) curriculum.\n\nThink of a SACCO office: Azure Policy enforces the county by-laws that every branch must follow, while Azure RBAC determines which staff members hold keys to specific offices.\n\nIn Azure, Resource Locks prevent accidental deletion, while Azure Policy enforces compliance standards across subscriptions.\n\nQuick check: Which Azure feature prevents accidental deletion of mission-critical production databases?';
           }
         }
-        return;
+
+        if (replyText) {
+          const aiMsg = {
+            id: aiMsgId,
+            role: 'ai',
+            text: replyText,
+            lang,
+          };
+          const next = [...updated, aiMsg];
+          setMessages(next);
+          if (!isSupabaseConfigured()) {
+            saveLocalMessages(next);
+          } else if (user?.id) {
+            try {
+              supabase.from('chat_messages').insert([
+                {
+                  user_id: user.id,
+                  role: 'ai',
+                  text: replyText,
+                  lang,
+                },
+              ]);
+            } catch (e) {
+              console.warn('Could not persist AI reply:', e);
+            }
+          }
+          return;
+        }
       }
 
       // If no reply could be generated, show failure message with Retry button
@@ -640,7 +684,7 @@ export function BuddyPage() {
         retryText: text,
         lang,
       };
-      setMessages([...updated, errorMsg]);
+      setMessages((prev) => [...prev.filter((m) => m.id !== aiMsgId), errorMsg]);
     } catch (err) {
       console.error('Study Buddy query encountered error:', err);
       const errorMsg = {
@@ -651,14 +695,15 @@ export function BuddyPage() {
         retryText: text,
         lang,
       };
-      setMessages([...updated, errorMsg]);
+      setMessages((prev) => [...prev.filter((m) => m.id !== aiMsgId), errorMsg]);
     } finally {
       // Never leave the loading state on screen
+      clearTimeout(timeoutId);
       setTyping(false);
     }
   };
 
-    // Determine if we are currently in an empty state
+      // Determine if we are currently in an empty state
   const isChatEmpty =
     messages.length === 0 ||
     (messages.length === 1 && messages[0]?.id === 'init-1');

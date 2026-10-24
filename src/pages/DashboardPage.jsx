@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Flame,
+  HelpCircle,
   Target,
 } from 'lucide-react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
@@ -20,16 +21,16 @@ import { useTheme } from '@/context/ThemeContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { calculateReadiness } from '@/lib/readiness';
 import { az900Topics } from '@/data/az900Outline';
-
-const WEEKLY_ACTIVITY = [
-  { day: 'Mon', minutes: 25 },
-  { day: 'Tue', minutes: 40 },
-  { day: 'Wed', minutes: 30 },
-  { day: 'Thu', minutes: 50 },
-  { day: 'Fri', minutes: 35 },
-  { day: 'Sat', minutes: 60 },
-  { day: 'Sun', minutes: 20 },
-];
+import {
+  calculateStreak,
+  calculateStudyTime,
+  calculateTopicMastery,
+  evaluateStudyPlan,
+  DEFAULT_PLAN_ITEMS,
+  getLocalStudySessions,
+  subscribeToStudyUpdates,
+  TOPIC_MASTERY_RULE_TEXT,
+} from '@/lib/studyAnalytics';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 14 },
@@ -54,6 +55,8 @@ function DomainProgress({ id, name, weight, readiness, mastered, total, topicsLi
           ? 'Azure Management & Governance'
           : name.replace(/^Describe\s+/i, '');
 
+  const displayReadiness = readiness !== null && readiness !== undefined ? `${readiness}%` : '-';
+
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-[#DDE3E8] bg-white p-4 dark:border-[#242424] dark:bg-[#121212] transition-all">
       <div className="flex items-start justify-between gap-2">
@@ -63,13 +66,13 @@ function DomainProgress({ id, name, weight, readiness, mastered, total, topicsLi
           </p>
           <p className="mt-0.5 text-xs text-[#5B666E] dark:text-slate-400">Exam weight {weight}</p>
         </div>
-        <span className="text-2xl font-extrabold tracking-tight text-[#007BA7] shrink-0">{readiness}%</span>
+        <span className="text-2xl font-extrabold tracking-tight text-[#007BA7] shrink-0">{displayReadiness}</span>
       </div>
 
       <div className="h-2 w-full overflow-hidden rounded-full bg-[#DDE3E8] dark:bg-[#242424]">
         <div
           className="h-full rounded-full bg-gradient-to-r from-[#FF007F] to-[#D6006B] transition-all duration-500"
-          style={{ width: `${readiness}%` }}
+          style={{ width: readiness !== null ? `${readiness}%` : '0%' }}
         />
       </div>
 
@@ -95,9 +98,12 @@ function DomainProgress({ id, name, weight, readiness, mastered, total, topicsLi
 
       {expanded && (
         <div className="mt-2 space-y-2 rounded-xl border border-[#DDE3E8] bg-[#EEF3F6] p-3 text-xs dark:border-[#242424] dark:bg-[#181818] animate-fade-up">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-[#5B666E] dark:text-slate-400">
-            Core Topics ({topicsList.length})
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#5B666E] dark:text-slate-400">
+              Core Topics ({topicsList.length})
+            </p>
+            <span className="text-[10px] text-slate-500 italic">5+ Qs, 80%+ acc</span>
+          </div>
           <div className="space-y-1.5">
             {topicsList.map((t) => (
               <div
@@ -112,14 +118,14 @@ function DomainProgress({ id, name, weight, readiness, mastered, total, topicsLi
                         : 'bg-[#DDE3E8] text-[#5B666E] dark:bg-[#242424] dark:text-slate-400'
                     }`}
                   >
-                    {t.isMastered ? '✓' : '•'}
+                    {t.isMastered ? '✓' : ' '}
                   </span>
                   <span className="font-semibold text-[#101213] dark:text-[#F8FAFC]">
                     {t.name}
                   </span>
                 </div>
                 <span className="text-[10px] text-slate-400 whitespace-nowrap">
-                  {t.questionCount} Qs
+                  {t.answeredCount ? `${t.answeredCount} answered (${t.accuracy}%)` : `${t.questionCount || 0} Qs`}
                 </span>
               </div>
             ))}
@@ -156,161 +162,75 @@ export function DashboardPage() {
   const { resolvedTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [attempts, setAttempts] = useState([]);
+  const [flashcards, setFlashcards] = useState([]);
   const [domains, setDomains] = useState(DEFAULT_DOMAINS);
-  const [_topics, setTopics] = useState([]);
-  const [studyPlanItems, setStudyPlanItems] = useState([]);
+  const [studySessions, setStudySessions] = useState([]);
+  const [studyPlanItems, setStudyPlanItems] = useState(DEFAULT_PLAN_ITEMS);
+  const [showMasteryTooltip, setShowMasteryTooltip] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
+  const fetchDashboardData = async () => {
+    try {
+      if (!isSupabaseConfigured() || !user?.id) {
+        const localAttempts = JSON.parse(localStorage.getItem('africloud_prep_attempts') || '[]');
+        const localCards = JSON.parse(localStorage.getItem('africloud_prep_flashcards') || '[]');
+        const localSessions = getLocalStudySessions();
+        const localPlan = JSON.parse(localStorage.getItem('africloud_prep_study_plan') || 'null');
 
-    async function fetchDashboardData() {
-      if (!user?.id) {
+        setAttempts(localAttempts);
+        setFlashcards(localCards);
+        setStudySessions(localSessions);
+        setDomains(DEFAULT_DOMAINS);
+
+        const basePlan = localPlan?.days?.[0]?.tasks || DEFAULT_PLAN_ITEMS;
+        setStudyPlanItems(evaluateStudyPlan(basePlan, { attempts: localAttempts, flashcards: localCards, studySessions: localSessions }));
         setLoading(false);
         return;
       }
 
-      try {
-        setLoading(true);
+      // Fetch live Supabase data
+      const [attemptsRes, domainsRes, flashcardsRes, planRes] = await Promise.all([
+        supabase.from('attempts').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('domains').select('*').order('id'),
+        supabase.from('flashcards').select('*').eq('user_id', user.id),
+        supabase.from('study_plans').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      ]);
 
-        if (!isSupabaseConfigured()) {
-          const localAttempts = JSON.parse(localStorage.getItem('africloud_prep_attempts') || '[]');
-          const localPlan = JSON.parse(localStorage.getItem('africloud_prep_study_plan') || 'null');
-          if (isMounted) {
-            setAttempts(localAttempts);
-            setDomains(DEFAULT_DOMAINS);
-            if (localPlan?.days) {
-              const todayPlan = Array.isArray(localPlan.days)
-                ? localPlan.days[0]?.tasks || localPlan.days[0]?.items || localPlan.days
-                : [];
-              if (todayPlan.length > 0) {
-                setStudyPlanItems(
-                  todayPlan.map((item, idx) => ({
-                    id: item.id || `plan-${idx}`,
-                    title: item.title || item.name || 'Core Domain Review',
-                    domain: item.domain || 'Cloud Concepts',
-                    minutes: item.minutes || item.duration || 20,
-                    done: Boolean(item.done),
-                  }))
-                );
-              }
-            } else {
-              setStudyPlanItems([
-                {
-                  id: 'p1',
-                  title: 'Diagnostic Quiz across 3 domains',
-                  domain: 'Cloud Concepts',
-                  minutes: 15,
-                  done: localAttempts.length > 0,
-                },
-                {
-                  id: 'p2',
-                  title: 'Review Availability Zones & Regions',
-                  domain: 'Azure Architecture',
-                  minutes: 20,
-                  done: false,
-                },
-                {
-                  id: 'p3',
-                  title: 'Study Resource Groups & Locks',
-                  domain: 'Azure Management',
-                  minutes: 15,
-                  done: false,
-                },
-              ]);
-            }
-            setLoading(false);
-          }
-          return;
-        }
+      const freshAttempts = attemptsRes.data || [];
+      const freshFlashcards = flashcardsRes.data || [];
+      const freshDomains = domainsRes.data && domainsRes.data.length > 0 ? domainsRes.data : DEFAULT_DOMAINS;
 
-        const { data: attemptsData } = await supabase
-          .from('attempts')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+      // Extract sessions from planRes or fallback to local
+      const remoteSessions = planRes.data?.warnings || [];
+      const localSessions = getLocalStudySessions();
+      const mergedSessions = remoteSessions.length > 0 ? remoteSessions : localSessions;
 
-        if (isMounted && attemptsData) {
-          setAttempts(attemptsData);
-        }
+      setAttempts(freshAttempts);
+      setDomains(freshDomains);
+      setFlashcards(freshFlashcards);
+      setStudySessions(mergedSessions);
 
-        const { data: domainsData } = await supabase.from('domains').select('*').order('id');
-
-        if (isMounted && domainsData && domainsData.length > 0) {
-          setDomains(domainsData);
-        }
-
-        const { data: topicsData } = await supabase.from('topics').select('*');
-
-        if (isMounted && topicsData) {
-          setTopics(topicsData);
-        }
-
-        const { data: planData } = await supabase
-          .from('study_plans')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (isMounted && planData?.days) {
-          const todayPlan = Array.isArray(planData.days)
-            ? planData.days[0]?.tasks || planData.days[0]?.items || planData.days
-            : [];
-          if (todayPlan.length > 0) {
-            setStudyPlanItems(
-              todayPlan.map((item, idx) => ({
-                id: item.id || `plan-${idx}`,
-                title: item.title || item.name || 'Core Domain Review',
-                domain: item.domain || 'Cloud Concepts',
-                minutes: item.minutes || item.duration || 20,
-                done: Boolean(item.done),
-              }))
-            );
-          }
-        } else if (isMounted) {
-          setStudyPlanItems([
-            {
-              id: 'p1',
-              title: 'Diagnostic Quiz across 3 domains',
-              domain: 'Cloud Concepts',
-              minutes: 15,
-              done: attemptsData?.length > 0,
-            },
-            {
-              id: 'p2',
-              title: 'Review Availability Zones & Regions',
-              domain: 'Azure Architecture',
-              minutes: 20,
-              done: false,
-            },
-            {
-              id: 'p3',
-              title: 'Study Resource Groups & Locks',
-              domain: 'Azure Management',
-              minutes: 15,
-              done: false,
-            },
-          ]);
-        }
-      } catch (err) {
-        console.warn('Dashboard live data fetch notice:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+      const basePlan = planRes.data?.days?.[0]?.tasks || DEFAULT_PLAN_ITEMS;
+      setStudyPlanItems(evaluateStudyPlan(basePlan, { attempts: freshAttempts, flashcards: freshFlashcards, studySessions: mergedSessions }));
+    } catch (err) {
+      console.warn('Dashboard data refresh notice:', err);
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     fetchDashboardData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user]);
+    const unsubscribe = subscribeToStudyUpdates(() => {
+      fetchDashboardData();
+    });
+    return () => unsubscribe();
+  }, [user?.id]);
 
   if (loading) {
     return <DashboardSkeleton />;
   }
 
+  // 1. Readiness status & checklist
   const readiness = calculateReadiness(attempts, domains);
   const readinessScore = readiness.total_answered >= 30 ? readiness.overall_accuracy : null;
 
@@ -327,44 +247,47 @@ export function DashboardPage() {
     }
   });
   const weakestDomainPassed = weakestDomainAccuracy !== null && weakestDomainAccuracy >= 70;
-  const weakestDomainDisplay = weakestDomainAccuracy !== null ? `${weakestDomainAccuracy}% / 70%` : '— / 70%';
+  const weakestDomainDisplay = weakestDomainAccuracy !== null ? `${weakestDomainAccuracy}% / 70%` : '- / 70%';
 
+  // 2. Real Topic Mastery (Rule: >= 5 answered with >= 80% accuracy)
+  const topicMastery = calculateTopicMastery(attempts, az900Topics);
+
+  // 3. Domain progress mapping with real windowed percentages & '-' on empty
   const domainProgressList = domains.map((d) => {
     const domainId = d.id || d.domain_id;
-    const r = readiness.domain_readiness[domainId];
     const domainAttempts = attempts.filter((a) => a.domain_id === domainId);
     const domainTopics = az900Topics.filter((t) => t.domain_id === domainId);
-    const totalTopics = domainTopics.length || (domainId === 1 ? 3 : 4);
+    const domainTopicMastery = calculateTopicMastery(domainAttempts, domainTopics);
 
-    const correctTopicIds = new Set(
-      domainAttempts.filter((a) => a.is_correct && a.topic_id).map((a) => a.topic_id)
-    );
-
-    const mappedTopics = domainTopics.map((t) => ({
-      ...t,
-      isMastered: correctTopicIds.has(t.id),
-    }));
-
-    const mastered = Math.min(correctTopicIds.size, totalTopics);
-    const calculatedPct = r?.accuracy !== null && r?.accuracy !== undefined ? r.accuracy : 0;
+    // Domain percentage: correct / answered from same window, '-' if 0 answers
+    const domainWindowAttempts = attempts.slice(0, 50).filter((a) => a.domain_id === domainId);
+    const count = domainWindowAttempts.length;
+    const correct = domainWindowAttempts.filter((a) => a.is_correct).length;
+    const calculatedPct = count > 0 ? Math.round((correct / count) * 100) : null;
 
     return {
       id: domainId,
       name: d.name,
       weight: d.weight,
       readiness: calculatedPct,
-      mastered,
-      total: totalTopics,
-      topicsList: mappedTopics,
+      mastered: domainTopicMastery.masteredCount,
+      total: domainTopicMastery.totalCount,
+      topicsList: domainTopicMastery.topicsWithStatus,
     };
   });
 
-  const streakDays = profile?.streak_days || 1;
-  const hoursThisWeek = profile?.daily_hours
-    ? `${Math.round(profile.daily_hours * 3.5)}h 15m`
-    : '3h 45m';
-  const totalMasteredTopics = domainProgressList.reduce((acc, curr) => acc + curr.mastered, 0);
-  const totalTopicCount = domainProgressList.reduce((acc, curr) => acc + curr.total, 0) || 67;
+  // 4. Real Streak calculation
+  const allActions = [
+    ...attempts,
+    ...flashcards,
+    ...studySessions,
+  ];
+  const streakDays = calculateStreak(allActions);
+
+  // 5. Real Study Time calculation
+  const studyTimeData = calculateStudyTime(studySessions);
+  const hoursThisWeek = studyTimeData.thisWeekDisplay;
+  const weeklyChartData = studyTimeData.chartData;
 
   const nextAction = (() => {
     if (attempts.length === 0) {
@@ -375,7 +298,7 @@ export function DashboardPage() {
         route: 'quiz',
       };
     }
-    const lowest = [...domainProgressList].sort((a, b) => a.readiness - b.readiness)[0];
+    const lowest = [...domainProgressList].sort((a, b) => (a.readiness || 0) - (b.readiness || 0))[0];
     const incompletePlan = studyPlanItems.find((s) => !s.done);
     if (incompletePlan) {
       return {
@@ -386,9 +309,9 @@ export function DashboardPage() {
       };
     }
     return {
-      title: `Reinforce ${lowest.name}`,
+      title: `Reinforce ${lowest?.name || 'Fundamentals'}`,
       minutes: 15,
-      domain: lowest.name,
+      domain: lowest?.name || 'Azure Architecture',
       route: 'quiz',
     };
   })();
@@ -399,7 +322,7 @@ export function DashboardPage() {
     );
     setStudyPlanItems(updated);
 
-    if (user?.id) {
+    if (user?.id && isSupabaseConfigured()) {
       try {
         await supabase.from('study_plans').upsert({
           user_id: user.id,
@@ -409,6 +332,8 @@ export function DashboardPage() {
       } catch (err) {
         console.warn('Could not persist study plan update:', err);
       }
+    } else {
+      localStorage.setItem('africloud_prep_study_plan', JSON.stringify({ days: [{ tasks: updated }] }));
     }
   };
 
@@ -427,7 +352,7 @@ export function DashboardPage() {
 
       {/* Bento Grid */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {/* Main gauge card — span 2 */}
+        {/* Main gauge card - span 2 */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
@@ -438,9 +363,9 @@ export function DashboardPage() {
             <div>
               <p className="eyebrow">Overall readiness</p>
               <h2 className="mt-1 text-xl font-bold text-[#101213] dark:text-[#F8FAFC]">
-                {readiness.is_ready
+                {readiness.is_exam_ready
                   ? 'Exam Ready! You are set to pass'
-                  : readiness.gap_message || "Keep going — you're close"}
+                  : readiness.gap_message || "Keep going - you're close"}
               </h2>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[#007BA7]/40 bg-[#007BA7]/10 px-3 py-1 text-xs font-semibold text-[#007BA7]">
@@ -470,13 +395,13 @@ export function DashboardPage() {
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-[#101213] dark:text-slate-300">
                   {readiness.total_answered >= 30 ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                   ) : (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-500 shrink-0">1</span>
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-400 dark:border-slate-600 text-[10px] text-slate-500 shrink-0">1</span>
                   )}
                   Questions answered (min. 30)
                 </span>
-                <span className={`font-mono font-bold ${readiness.total_answered >= 30 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                <span className={`font-mono font-bold ${readiness.total_answered >= 30 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
                   {readiness.total_answered} / 30
                 </span>
               </div>
@@ -484,27 +409,27 @@ export function DashboardPage() {
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-[#101213] dark:text-slate-300">
                   {readiness.total_answered >= 30 && readiness.overall_accuracy >= 80 ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                   ) : (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-500 shrink-0">2</span>
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-400 dark:border-slate-600 text-[10px] text-slate-500 shrink-0">2</span>
                   )}
                   Overall accuracy (last 50, min. 80%)
                 </span>
-                <span className={`font-mono font-bold ${readiness.total_answered >= 30 && readiness.overall_accuracy >= 80 ? 'text-emerald-400' : 'text-slate-400'}`}>
-                  {readiness.total_answered > 0 ? `${readiness.overall_accuracy}%` : '—'} / 80%
+                <span className={`font-mono font-bold ${readiness.total_answered >= 30 && readiness.overall_accuracy >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                  {readiness.total_answered > 0 ? `${readiness.overall_accuracy}%` : '-'} / 80%
                 </span>
               </div>
 
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-[#101213] dark:text-slate-300">
                   {weakestDomainPassed ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                   ) : (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-500 shrink-0">3</span>
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-400 dark:border-slate-600 text-[10px] text-slate-500 shrink-0">3</span>
                   )}
                   Weakest domain ({weakestDomainName}, min. 70%)
                 </span>
-                <span className={`font-mono font-bold ${weakestDomainPassed ? 'text-emerald-400' : 'text-slate-400'}`}>
+                <span className={`font-mono font-bold ${weakestDomainPassed ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
                   {weakestDomainDisplay}
                 </span>
               </div>
@@ -521,7 +446,7 @@ export function DashboardPage() {
             <div>
               <p className="text-xs text-[#5B666E] dark:text-slate-400">Streak</p>
               <p className="mt-1 flex items-center gap-1.5 text-lg font-bold text-[#101213] dark:text-[#F8FAFC]">
-                <Flame className="h-4 w-4 text-orange-400" /> {streakDays} {streakDays === 1 ? 'day' : 'days'}
+                <Flame className="h-4 w-4 text-orange-500" /> {streakDays} {streakDays === 1 ? 'day' : 'days'}
               </p>
             </div>
             <div>
@@ -530,17 +455,34 @@ export function DashboardPage() {
                 <Clock className="h-4 w-4 text-[#007BA7]" /> {hoursThisWeek}
               </p>
             </div>
-            <div>
-              <p className="text-xs text-[#5B666E] dark:text-slate-400">Topics</p>
+            <div className="relative">
+              <div className="flex items-center gap-1">
+                <p className="text-xs text-[#5B666E] dark:text-slate-400">Topics</p>
+                <button
+                  type="button"
+                  onClick={() => setShowMasteryTooltip((prev) => !prev)}
+                  title="Topic mastery criteria"
+                  aria-label="Topic mastery criteria"
+                  className="text-slate-400 hover:text-[#007BA7]"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </button>
+              </div>
               <p className="mt-1 flex items-center gap-1.5 text-lg font-bold text-[#101213] dark:text-[#F8FAFC]">
-                <CheckCircle2 className="h-4 w-4 text-[#007BA7]" /> {totalMasteredTopics}/
-                {totalTopicCount}
+                <CheckCircle2 className="h-4 w-4 text-[#007BA7]" /> {topicMastery.masteredCount}/
+                {topicMastery.totalCount}
               </p>
+              {showMasteryTooltip && (
+                <div className="absolute bottom-full mb-2 left-0 w-52 rounded-xl border border-[#DDE3E8] bg-white p-2.5 text-[11px] shadow-lg dark:border-[#242424] dark:bg-[#181818] text-[#101213] dark:text-slate-300 z-30">
+                  <p className="font-bold text-[#007BA7] mb-1">Topic Mastery Rule</p>
+                  <p>{TOPIC_MASTERY_RULE_TEXT}</p>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
 
-        {/* Next best action card (Cerulean + Neon Rose Mixture) */}
+        {/* Next best action card */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
@@ -555,7 +497,7 @@ export function DashboardPage() {
               {nextAction.title}
             </h3>
             <div className="mt-3 flex items-center gap-2 text-sm text-[#5B666E] dark:text-slate-300">
-              <Clock className="h-4 w-4 text-[#FF007F]" /> {nextAction.minutes} min ·{' '}
+              <Clock className="h-4 w-4 text-[#FF007F]" /> {nextAction.minutes} min •{' '}
               {nextAction.domain}
             </div>
           </div>
@@ -567,7 +509,7 @@ export function DashboardPage() {
           </button>
         </motion.div>
 
-        {/* Domain progress — span 2 */}
+        {/* Domain progress - span 2 */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
@@ -604,7 +546,7 @@ export function DashboardPage() {
           <p className="mt-1 text-xs text-[#5B666E] dark:text-slate-400">Last 7 days</p>
           <div className="mt-3 h-40 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={WEEKLY_ACTIVITY} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
+              <BarChart data={weeklyChartData} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
                 <XAxis
                   dataKey="day"
                   tickLine={false}
@@ -613,13 +555,14 @@ export function DashboardPage() {
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(0, 123, 167, 0.12)' }}
+                  formatter={(val) => [`${val} mins`, 'Study Time']}
                   contentStyle={{
-                    backgroundColor: '#121212',
+                    backgroundColor: resolvedTheme === 'dark' ? '#121212' : '#ffffff',
                     borderRadius: 12,
-                    border: '1px solid #242424',
+                    border: resolvedTheme === 'dark' ? '1px solid #242424' : '1px solid #DDE3E8',
                     fontSize: 12,
                     fontWeight: 600,
-                    color: '#F8FAFC',
+                    color: resolvedTheme === 'dark' ? '#F8FAFC' : '#101213',
                   }}
                 />
                 <Bar dataKey="minutes" radius={[6, 6, 0, 0]} fill="#007BA7" />
@@ -628,7 +571,7 @@ export function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Study plan card — span 3 */}
+        {/* Study plan card - span 3 */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
@@ -641,40 +584,60 @@ export function DashboardPage() {
               <h2 className="text-lg font-bold text-[#101213] dark:text-[#F8FAFC]">Personal study plan</h2>
             </div>
             <span className="text-xs font-semibold text-[#FF007F]">
-              {studyPlanItems.length} items today
+              {studyPlanItems.filter((s) => s.done).length} of {studyPlanItems.length} completed
             </span>
           </div>
           <ul className="divide-y divide-[#DDE3E8] dark:divide-[#242424]">
             {studyPlanItems.map((s) => (
               <li
                 key={s.id}
-                onClick={() => toggleTask(s.id)}
-                className="flex items-center justify-between py-3 cursor-pointer group"
+                className="flex items-center justify-between py-3.5 first:pt-0 last:pb-0"
               >
                 <div className="flex items-center gap-3">
-                  <span
-                    className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
-                      s.done
-                        ? 'bg-gradient-to-r from-[#FF007F] to-[#D6006B] text-white'
-                        : 'border-2 border-[#DDE3E8] dark:border-[#242424] text-transparent group-hover:border-[#FF007F]'
-                    }`}
+                  <button
+                    onClick={() => toggleTask(s.id)}
+                    aria-label={s.done ? `Mark '${s.title}' incomplete` : `Mark '${s.title}' complete`}
+                    className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#007BA7] rounded-full"
                   >
-                    <CheckCircle2 className="h-4 w-4" />
-                  </span>
-                  <span
-                    className={`text-sm font-medium ${
-                      s.done ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-[#101213] dark:text-[#F8FAFC]'
-                    }`}
-                  >
-                    {s.title}
-                  </span>
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-full border transition-all ${
+                        s.done
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : 'border-slate-300 hover:border-[#007BA7] dark:border-slate-600'
+                      }`}
+                    >
+                      {s.done && <CheckCircle2 className="h-4 w-4" />}
+                    </span>
+                  </button>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p
+                        className={`text-sm font-semibold ${
+                          s.done
+                            ? 'text-slate-400 line-through'
+                            : 'text-[#101213] dark:text-[#F8FAFC]'
+                        }`}
+                      >
+                        {s.title}
+                      </p>
+                      <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                        s.type === 'auto'
+                          ? 'bg-[#007BA7]/10 text-[#007BA7]'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                      }`}>
+                        {s.type === 'auto' ? 'Auto' : 'Manual'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#5B666E] dark:text-slate-400">
+                      {s.domain} • {s.minutes} mins
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-[#5B666E] dark:text-slate-400">
-                  <span className="hidden sm:inline">{s.domain}</span>
-                  <span className="inline-flex items-center gap-1 text-[#007BA7]">
-                    <Clock className="h-3.5 w-3.5" /> {s.minutes}m
+                {s.done && (
+                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    Done
                   </span>
-                </div>
+                )}
               </li>
             ))}
           </ul>

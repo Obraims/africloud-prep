@@ -5,6 +5,7 @@ import { defaultFlashcards } from '@/data/seedQuestions';
 import { advanceCard } from '@/lib/leitner';
 import { useAuth } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { logStudySession } from '@/lib/studyAnalytics';
 
 export function FlashcardsPage() {
   const { user } = useAuth();
@@ -99,6 +100,12 @@ export function FlashcardsPage() {
       }
 
       await syncCardUpdate(card, updated);
+      logStudySession({
+        userId: user?.id,
+        mode: 'flashcards',
+        durationSeconds: 20,
+        details: { cardId: card.id, domain: card.domain, correct },
+      });
       go(1);
     },
     [card, cardList, go, syncCardUpdate]

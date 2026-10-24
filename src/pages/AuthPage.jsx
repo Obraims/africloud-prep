@@ -531,7 +531,7 @@ export function AuthPage() {
                   tabIndex={-1}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3.5 top-3 text-slate-400 hover:text-[#F8FAFC] transition-colors"
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-[#101213] dark:hover:text-[#F8FAFC] transition-colors"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -664,7 +664,7 @@ export function AuthPage() {
                       showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'
                     }
                     onClick={() => setShowConfirmPassword((prev) => !prev)}
-                    className="absolute right-3.5 top-3 text-slate-400 hover:text-[#F8FAFC] transition-colors"
+                    className="absolute right-3.5 top-3 text-slate-400 hover:text-[#101213] dark:hover:text-[#F8FAFC] transition-colors"
                   >
                     {showConfirmPassword ? (
                       <EyeOff className="h-4 w-4" />

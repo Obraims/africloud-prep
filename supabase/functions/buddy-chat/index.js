@@ -7,14 +7,62 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Client configuration outside request handler for fast warm starts
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite';
 const rateLimits = new Map();
-const MAX_REQUESTS_PER_MINUTE = 20;
+const MAX_REQUESTS_PER_MINUTE = 30;
 
 const requestSchema = z.object({
   message: z.string().min(1).max(1000),
   language: z.enum(['English', 'Kiswahili', 'Sheng']).default('English'),
   learner_context: z.string().optional(),
+  stream: z.boolean().optional().default(false),
+  history: z.array(z.object({
+    role: z.string(),
+    text: z.string(),
+  })).optional().default([]),
 });
+
+function buildEdgeSystemPrompt(language, learnerContext) {
+  const isEnglish = language === 'English';
+  const isKiswahili = language === 'Kiswahili';
+
+  let languageRules = '';
+  if (isEnglish) {
+    languageRules = `LANGUAGE RULES (ENGLISH MODE):
+- Reply entirely in plain, natural English.
+- Do NOT use any Swahili or Sheng words, greetings, or sign-offs (e.g. avoid "Jambo", "Sasa", "Niaje", "Karibu", "Niambie", "Asante", "Pole", "Sawa", "Poa").
+- Kenyan analogies (M-Pesa agents, matatus, SACCOs, chamas, county by-laws) are conceptual examples, not language. Explain them purely in clear English.
+- Do NOT use any emojis. Zero emojis.
+- Greetings and small talk: reply in exactly one or two short lines.`;
+  } else if (isKiswahili) {
+    languageRules = `LANGUAGE RULES (KISWAHILI MODE):
+- Jibu kwa lugha safi ya Kiswahili fasaha.
+- Tumia mifano halisi ya Kenya (mawakala wa M-Pesa, matatu, SACCO, chamas).
+- Weka majina ya huduma za Azure kwa Kiingereza.`;
+  } else {
+    languageRules = `LANGUAGE RULES (SHENG MODE):
+- Bonga kwa Sheng ya mtaani, changanya Kiswahili na English vile techies wa Nairobi wanabonga.
+- Tumia mifano ya mtaani (nganya, ma-agent wa M-Pesa, SACCO locks).
+- Weka majina ya huduma za Azure kwa Kiingereza.`;
+  }
+
+  return `You are the AfriCloud Prep study buddy for the Microsoft Azure Fundamentals (AZ-900) exam.
+Reply in ${language}.
+
+${languageRules}
+
+CORE RULES:
+1. Answer in at most 120 words unless the user asks for more detail.
+2. For greetings and small talk: reply in one or two short lines.
+3. For Azure concepts: give a one-sentence plain definition, exactly ONE relatable Kenyan analogy (not several), and how it maps to Azure.
+4. Conclude technical answers with exactly one quick-check question (${isEnglish ? 'Quick Check:' : 'Swali la kujipima:'}).
+5. Never invent fictional Azure features. Reference Microsoft Learn if unsure.
+6. Never reproduce actual exam questions.
+${isEnglish ? '7. ABSOLUTELY NO EMOJIS in the response.' : ''}
+${learnerContext ? `Learner context: ${learnerContext}` : ''}`;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -57,73 +105,67 @@ serve(async (req) => {
     const body = await req.json();
     const validated = requestSchema.parse(body);
 
-    const isEnglish = validated.language === 'English';
-    const isKiswahili = validated.language === 'Kiswahili';
-
-    let languageRules = '';
-    if (isEnglish) {
-      languageRules = `LANGUAGE RULES (ENGLISH MODE):
-- Reply entirely in plain, natural English.
-- Do NOT use any Swahili or Sheng words, greetings, or sign-offs (e.g. avoid "Jambo", "Sasa", "Niaje", "Karibu", "Niambie", "Asante", "Pole", "Sawa", "Poa").
-- Kenyan analogies (M-Pesa agents, matatus, SACCOs, chamas, county by-laws) are conceptual examples, not language. Keep them as examples in plain English.
-- No emojis. Zero emojis.
-- Greetings and small talk: exactly one or two short lines (e.g. "Hi, what Azure topic would you like to cover today?").`;
-    } else if (isKiswahili) {
-      languageRules = `LANGUAGE RULES (KISWAHILI MODE):
-- Jibu kwa lugha safi ya Kiswahili fasaha.
-- Tumia mifano halisi ya Kenya (mawakala wa M-Pesa, matatu, SACCO, chamas).`;
-    } else {
-      languageRules = `LANGUAGE RULES (SHENG MODE):
-- Bonga kwa Sheng ya mtaani, changanya Kiswahili na English vile techies wa Nairobi wanabonga.
-- Tumia mifano ya mtaani (nganya, ma-agent wa M-Pesa, n.k.).`;
-    }
-
-    const systemPrompt = `You are the AfriCloud Prep study buddy, an unofficial study buddy for the Microsoft Azure Fundamentals (AZ-900) exam.
-Reply in ${validated.language}.
-
-${languageRules}
-
-Rules:
-1. GREETINGS: If the user sends a greeting or small talk ('Hi', 'Hello', 'How are you'):
-${
-  isEnglish
-    ? '   - Respond in 1-2 short lines in plain English without emojis or Swahili words, asking what Azure topic they want to cover.'
-    : '   - Greet them warmly in ' + validated.language + ' and ask what Azure concept they want to study.'
-}
-2. AZURE CONCEPTS: Always answer in 3 parts:
-   (a) One-sentence plain definition
-   (b) A real-life Kenyan or East African analogy (e.g. M-Pesa agents, SACCOs, matatus, county by-laws)
-   (c) How it appears in Azure with the exact service or feature name.
-3. Keep Azure service names in English in every language.
-4. Keep answer under 150 words.
-5. End technical answers with exactly one quick check question (${isEnglish ? 'Quick Check:' : 'Swali la kujipima:'}).
-6. Never invent Azure features. If unsure, say "check Microsoft Learn".
-7. Never reproduce real exam questions.
-${isEnglish ? '8. Do NOT use emojis.' : ''}
-${validated.learner_context ? `Learner context: ${validated.learner_context}` : ''}`;
-
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-2.5-flash';
-
-    if (!geminiApiKey) {
+    if (!GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY is not configured on the server');
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`,
-      {
+    const systemPrompt = buildEdgeSystemPrompt(validated.language, validated.learner_context);
+    const contents = [];
+
+    // Send only the last 6 messages of history
+    const recentHistory = (validated.history || []).slice(-6);
+    for (const h of recentHistory) {
+      if (h.text && (h.role === 'user' || h.role === 'ai')) {
+        contents.push({
+          role: h.role === 'user' ? 'user' : 'model',
+          parts: [{ text: h.text }],
+        });
+      }
+    }
+    contents.push({ role: 'user', parts: [{ text: validated.message }] });
+
+    const payload = {
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 280,
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
+      },
+    };
+
+    if (validated.stream) {
+      const streamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
+      const geminiRes = await fetch(streamUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: validated.message }] }],
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 350,
-          },
-        }),
+        body: JSON.stringify(payload),
+      });
+
+      if (!geminiRes.ok) {
+        const errText = await geminiRes.text();
+        throw new Error(`Gemini API error: ${geminiRes.status} ${errText}`);
       }
-    );
+
+      return new Response(geminiRes.body, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // Non-streaming response
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
 
     if (!response.ok) {
       const errText = await response.text();

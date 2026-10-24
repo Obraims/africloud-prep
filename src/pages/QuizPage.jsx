@@ -16,6 +16,7 @@ import { az900Domains, az900Topics } from '@/data/az900Outline';
 import { useRouter } from '@/context/RouterContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
+import { logStudySession } from '@/lib/studyAnalytics';
 
 export function QuizPage() {
   const { navigate } = useRouter();
@@ -111,6 +112,12 @@ export function QuizPage() {
     setRevealed(true);
     const correct = i === q.answerIndex;
     if (correct) setScore((s) => s + 1);
+    logStudySession({
+      userId: user?.id,
+      mode: 'quiz',
+      durationSeconds: 30,
+      details: { questionId: q.id, domainId: q.domain_id, isCorrect: correct },
+    });
 
     if (user?.id) {
       const attemptRecord = {

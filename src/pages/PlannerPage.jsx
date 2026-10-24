@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from '@/context/RouterContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { notifyStudyUpdate } from '@/lib/studyAnalytics';
 
 const DEFAULT_DAYS = [
   {
@@ -53,7 +55,7 @@ const DEFAULT_DAYS = [
   {
     dayNumber: 4,
     domain: 'Architecture & Services',
-    domainColor: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+    domainColor: 'text-emerald-700 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-400',
     title: 'Regions, Availability Zones & Region Pairs',
     durationMinutes: 90,
     tasks: [
@@ -65,7 +67,7 @@ const DEFAULT_DAYS = [
   {
     dayNumber: 5,
     domain: 'Architecture & Services',
-    domainColor: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+    domainColor: 'text-emerald-700 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-400',
     title: 'Compute: VMs, Containers, AKS & App Services',
     durationMinutes: 90,
     tasks: [
@@ -77,7 +79,7 @@ const DEFAULT_DAYS = [
   {
     dayNumber: 6,
     domain: 'Architecture & Services',
-    domainColor: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+    domainColor: 'text-emerald-700 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-400',
     title: 'Networking & Connectivity Fundamentals',
     durationMinutes: 90,
     tasks: [
@@ -89,7 +91,7 @@ const DEFAULT_DAYS = [
   {
     dayNumber: 7,
     domain: 'Architecture & Services',
-    domainColor: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+    domainColor: 'text-emerald-700 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-400',
     title: 'Azure Storage: Blob, Disk, Files & Tiers',
     durationMinutes: 90,
     tasks: [
@@ -101,7 +103,7 @@ const DEFAULT_DAYS = [
   {
     dayNumber: 8,
     domain: 'Management & Governance',
-    domainColor: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
+    domainColor: 'text-amber-800 border-amber-500/30 bg-amber-500/10 dark:text-amber-400',
     title: 'Subscriptions, Management Groups & Resource Groups',
     durationMinutes: 90,
     tasks: [
@@ -113,7 +115,7 @@ const DEFAULT_DAYS = [
   {
     dayNumber: 9,
     domain: 'Management & Governance',
-    domainColor: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
+    domainColor: 'text-amber-800 border-amber-500/30 bg-amber-500/10 dark:text-amber-400',
     title: 'Governance, Azure Policy & Resource Locks',
     durationMinutes: 90,
     tasks: [
@@ -125,7 +127,7 @@ const DEFAULT_DAYS = [
   {
     dayNumber: 10,
     domain: 'Management & Governance',
-    domainColor: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
+    domainColor: 'text-amber-800 border-amber-500/30 bg-amber-500/10 dark:text-amber-400',
     title: 'Compliance, Defender for Cloud & Azure Advisor',
     durationMinutes: 90,
     tasks: [
@@ -137,7 +139,7 @@ const DEFAULT_DAYS = [
   {
     dayNumber: 11,
     domain: 'Exam Simulation',
-    domainColor: 'text-[#FF007F] border-[#FF007F]/30 bg-[#FF007F]/10',
+    domainColor: 'text-[#D6006B] border-[#FF007F]/30 bg-[#FF007F]/10 dark:text-[#FF007F]',
     title: 'Full-Length Timed Mock Exam (30 Questions)',
     durationMinutes: 90,
     tasks: [
@@ -149,7 +151,7 @@ const DEFAULT_DAYS = [
   {
     dayNumber: 12,
     domain: 'Final Polish',
-    domainColor: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
+    domainColor: 'text-purple-700 border-purple-500/30 bg-purple-500/10 dark:text-purple-400',
     title: 'Readiness Rule Verification & Final Review',
     durationMinutes: 60,
     tasks: [
@@ -163,7 +165,7 @@ const DEFAULT_DAYS = [
 const STORAGE_TICKS_KEY = 'africloud_planner_ticks_v1';
 
 export function PlannerPage() {
-  const { profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
   const { navigate } = useRouter();
 
   const [examDate, setExamDate] = useState(() => {
@@ -185,19 +187,83 @@ export function PlannerPage() {
     }
   });
 
+  // Sync with Supabase on mount
   useEffect(() => {
+    async function loadRemotePlan() {
+      if (user?.id && isSupabaseConfigured()) {
+        try {
+          const { data } = await supabase
+            .from('study_plans')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (data?.days?.[0]?.completed_tasks) {
+            setCompletedTasks(data.days[0].completed_tasks);
+            localStorage.setItem(STORAGE_TICKS_KEY, JSON.stringify(data.days[0].completed_tasks));
+          }
+        } catch (e) {
+          console.warn('Could not load remote plan:', e);
+        }
+      }
+    }
+    loadRemotePlan();
+  }, [user?.id]);
+
+  // Persist completed tasks locally and to Supabase
+  const persistTasks = async (newCompleted) => {
     try {
-      localStorage.setItem(STORAGE_TICKS_KEY, JSON.stringify(completedTasks));
+      localStorage.setItem(STORAGE_TICKS_KEY, JSON.stringify(newCompleted));
     } catch (e) {
       console.warn('Task save warning:', e);
     }
-  }, [completedTasks]);
+
+    if (user?.id && isSupabaseConfigured()) {
+      try {
+        const { data: existingPlan } = await supabase
+          .from('study_plans')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingPlan?.id) {
+          await supabase
+            .from('study_plans')
+            .update({
+              days: [{ completed_tasks: newCompleted }],
+            })
+            .eq('id', existingPlan.id);
+        } else {
+          await supabase.from('study_plans').insert([
+            {
+              user_id: user.id,
+              exam_date: examDate,
+              hours_per_day: Number(dailyHours),
+              days: [{ completed_tasks: newCompleted }],
+            },
+          ]);
+        }
+      } catch (err) {
+        console.warn('Could not sync tasks to Supabase:', err);
+      }
+    }
+
+    notifyStudyUpdate();
+  };
 
   const toggleTask = (taskId) => {
-    setCompletedTasks((prev) => ({
-      ...prev,
-      [taskId]: !prev[taskId],
-    }));
+    setCompletedTasks((prev) => {
+      const updated = {
+        ...prev,
+        [taskId]: !prev[taskId],
+      };
+      persistTasks(updated);
+      return updated;
+    });
   };
 
   // Days calculation
@@ -322,41 +388,42 @@ export function PlannerPage() {
         </button>
       </div>
 
-      {/* Top Controls Grid */}
-      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Settings Form */}
-        <div className="bento-card border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212] p-5 shadow-sm dark:shadow-lifted">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Plan Settings</p>
-          <form onSubmit={handleSaveSettings} className="mt-4 space-y-3">
+      {/* Settings & Countdown Grid */}
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {/* Schedule Preferences Card */}
+        <div className="bento-card flex flex-col justify-between border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212] p-5 shadow-sm dark:shadow-lifted">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-[#007BA7]">Target Schedule</p>
+            <h2 className="mt-1 text-base font-bold text-[#101213] dark:text-[#F8FAFC]">Exam Pace & Timing</h2>
+          </div>
+
+          <form onSubmit={handleSaveSettings} className="mt-4 space-y-3.5">
             <div>
-              <label htmlFor="plan-exam-date" className="mb-1 block text-xs font-semibold text-[#101213] dark:text-slate-300">
+              <label className="block text-xs font-semibold text-[#5B666E] dark:text-slate-400 mb-1">
                 Target Exam Date
               </label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <div className="relative flex items-center">
+                <Calendar className="absolute left-3 h-4 w-4 text-[#007BA7]" />
                 <input
-                  id="plan-exam-date"
                   type="date"
                   value={examDate}
                   onChange={(e) => setExamDate(e.target.value)}
-                  className="w-full rounded-xl border border-[#DDE3E8] bg-[#F6F8FA] py-2 pl-9 pr-3 text-xs font-medium text-[#101213] dark:border-[#242424] dark:bg-[#181818] dark:text-[#F8FAFC] outline-none focus:border-[#007BA7]"
+                  className="w-full rounded-xl border border-[#DDE3E8] bg-white pl-9 pr-3 py-2 text-xs font-semibold text-[#101213] focus:border-[#007BA7] focus:outline-none dark:border-[#242424] dark:bg-[#181818] dark:text-[#F8FAFC]"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="plan-daily-hours" className="mb-1 block text-xs font-semibold text-[#101213] dark:text-slate-300">
-                Daily Study Commitment
+              <label className="block text-xs font-semibold text-[#5B666E] dark:text-slate-400 mb-1">
+                Daily Study Target
               </label>
-              <div className="relative">
-                <Clock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <div className="relative flex items-center">
+                <Clock className="absolute left-3 h-4 w-4 text-[#007BA7]" />
                 <select
-                  id="plan-daily-hours"
                   value={dailyHours}
                   onChange={(e) => setDailyHours(e.target.value)}
-                  className="w-full rounded-xl border border-[#DDE3E8] bg-[#F6F8FA] py-2 pl-9 pr-3 text-xs font-medium text-[#101213] dark:border-[#242424] dark:bg-[#181818] dark:text-[#F8FAFC] outline-none focus:border-[#007BA7]"
+                  className="w-full rounded-xl border border-[#DDE3E8] bg-white pl-9 pr-3 py-2 text-xs font-semibold text-[#101213] focus:border-[#007BA7] focus:outline-none dark:border-[#242424] dark:bg-[#181818] dark:text-[#F8FAFC]"
                 >
-                  <option value="0.5">30 mins / day</option>
                   <option value="1">1 hour / day</option>
                   <option value="1.5">1.5 hours / day (Recommended)</option>
                   <option value="2">2 hours / day</option>
@@ -369,11 +436,11 @@ export function PlannerPage() {
               <button
                 type="submit"
                 disabled={savingSettings}
-                className="rounded-lg bg-[#242424] px-4 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-[#2c2c2c] hover:text-white"
+                className="rounded-lg bg-[#007BA7] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#005C8A] dark:bg-[#242424] dark:text-slate-200 dark:hover:bg-[#2c2c2c] dark:hover:text-white"
               >
                 {savingSettings ? 'Saving...' : 'Update Schedule'}
               </button>
-              {saveFeedback && <span className="text-xs font-semibold text-emerald-400">{saveFeedback}</span>}
+              {saveFeedback && <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{saveFeedback}</span>}
             </div>
           </form>
         </div>
@@ -383,16 +450,16 @@ export function PlannerPage() {
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-[#007BA7]">Exam Countdown</p>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-4xl font-extrabold text-[#F8FAFC]">{daysLeft}</span>
-              <span className="text-base font-semibold text-slate-400">{daysLeft === 1 ? 'day remaining' : 'days remaining'}</span>
+              <span className="text-4xl font-extrabold text-[#101213] dark:text-[#F8FAFC]">{daysLeft}</span>
+              <span className="text-base font-semibold text-[#5B666E] dark:text-slate-400">{daysLeft === 1 ? 'day remaining' : 'days remaining'}</span>
             </div>
-            <p className="mt-1 text-xs text-slate-400">Target date: {new Date(examDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+            <p className="mt-1 text-xs text-[#5B666E] dark:text-slate-400">Target date: {new Date(examDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
           </div>
 
-          <div className="mt-4 border-t border-[#242424] pt-3">
-            <p className="text-xs text-slate-400">Total Planned Study Time</p>
-            <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-[#F8FAFC]">
-              <Clock className="h-4 w-4 text-[#007BA7]" />
+          <div className="mt-4 border-t border-[#DDE3E8] dark:border-[#242424] pt-3">
+            <p className="text-xs text-[#5B666E] dark:text-slate-400">Total Planned Study Time</p>
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-[#101213] dark:text-[#F8FAFC]">
+              <Clock className="h-4 w-4 text-[#007BA7] dark:text-[#3bb4dd]" />
               {(daysLeft * Number(dailyHours)).toFixed(1)} hours ({dailyHours} hrs/day)
             </p>
           </div>
@@ -401,22 +468,23 @@ export function PlannerPage() {
         {/* Progress Card */}
         <div className="bento-card flex flex-col justify-between border border-[#DDE3E8] bg-white dark:border-[#242424] dark:bg-[#121212] p-5 shadow-sm dark:shadow-lifted">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Curriculum Progress</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-[#5B666E] dark:text-slate-400">Curriculum Progress</p>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-4xl font-extrabold text-[#F8FAFC]">{progressPercent}%</span>
-              <span className="text-xs font-medium text-slate-400">({completedCount} of {totalTasksCount} tasks)</span>
+              <span className="text-4xl font-extrabold text-[#101213] dark:text-[#F8FAFC]">{progressPercent}%</span>
+              <span className="text-xs font-medium text-[#5B666E] dark:text-slate-400">({completedCount} of {totalTasksCount} tasks)</span>
             </div>
 
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#202020]">
+            {/* Progress bar track: light gray (#DDE3E8) in light mode, brand blue fill; dark track in dark mode */}
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#DDE3E8] dark:bg-[#202020]">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#007BA7] to-[#FF007F] transition-all duration-500"
+                className="h-full rounded-full bg-[#007BA7] transition-all duration-500"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-between border-t border-[#242424] pt-3 text-xs">
-            <span className="text-slate-400">Ready to test?</span>
+          <div className="mt-4 flex items-center justify-between border-t border-[#DDE3E8] dark:border-[#242424] pt-3 text-xs">
+            <span className="text-[#5B666E] dark:text-slate-400">Ready to test?</span>
             <button
               type="button"
               onClick={() => navigate('quiz')}
@@ -431,8 +499,8 @@ export function PlannerPage() {
       {/* Day by Day Plan Schedule */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-[#F8FAFC]">Daily Milestone Roadmap</h2>
-          <span className="text-xs text-slate-400">Tick items off as you complete them</span>
+          <h2 className="text-xl font-bold text-[#101213] dark:text-[#F8FAFC]">Daily Milestone Roadmap</h2>
+          <span className="text-xs text-[#5B666E] dark:text-slate-400">Tick items off as you complete them</span>
         </div>
 
         <div className="grid grid-cols-1 gap-3.5">
@@ -447,7 +515,7 @@ export function PlannerPage() {
                 transition={{ duration: 0.2 }}
                 className={`rounded-2xl border p-5 transition-all ${
                   allDayTasksDone
-                    ? 'border-emerald-500/40 bg-emerald-950/10'
+                    ? 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/10'
                     : 'border-[#DDE3E8] bg-white hover:border-slate-300 dark:border-[#242424] dark:bg-[#121212] dark:hover:border-[#333]'
                 }`}
               >
@@ -461,17 +529,17 @@ export function PlannerPage() {
                         <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${item.domainColor}`}>
                           {item.domain}
                         </span>
-                        <h3 className="text-base font-bold text-[#F8FAFC]">{item.title}</h3>
+                        <h3 className="text-base font-bold text-[#101213] dark:text-[#F8FAFC]">{item.title}</h3>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1 text-xs text-slate-400 font-medium">
+                    <span className="flex items-center gap-1 text-xs text-[#5B666E] dark:text-slate-400 font-medium">
                       <Clock className="h-3.5 w-3.5" /> {item.durationMinutes} mins
                     </span>
                     {allDayTasksDone && (
-                      <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400 border border-emerald-500/30">
+                      <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
                         <Check className="h-3 w-3" /> Completed
                       </span>
                     )}
@@ -479,7 +547,7 @@ export function PlannerPage() {
                 </div>
 
                 {/* Task Checklist for Day */}
-                <div className="mt-4 space-y-2 border-t border-[#1c1c1c] pt-3">
+                <div className="mt-4 space-y-2 border-t border-[#DDE3E8] dark:border-[#1c1c1c] pt-3">
                   {item.tasks.map((taskText, idx) => {
                     const taskId = `day-${item.dayNumber}-${idx}`;
                     const isDone = !!completedTasks[taskId];
@@ -489,7 +557,9 @@ export function PlannerPage() {
                         key={taskId}
                         onClick={() => toggleTask(taskId)}
                         className={`flex cursor-pointer items-start gap-3 rounded-xl p-2.5 text-xs transition-colors ${
-                          isDone ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'hover:bg-[#F0F4F8] text-[#101213] dark:hover:bg-[#181818] dark:text-slate-300'
+                          isDone
+                            ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+                            : 'hover:bg-[#F0F4F8] text-[#101213] dark:hover:bg-[#181818] dark:text-slate-300'
                         }`}
                       >
                         <button
@@ -498,12 +568,12 @@ export function PlannerPage() {
                           className="mt-0.5 shrink-0"
                         >
                           {isDone ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           ) : (
-                            <Circle className="h-4 w-4 text-slate-500 hover:text-slate-300" />
+                            <Circle className="h-4 w-4 text-slate-400 hover:text-[#007BA7] dark:text-slate-500 dark:hover:text-slate-300" />
                           )}
                         </button>
-                        <span className={`leading-relaxed ${isDone ? 'line-through text-slate-400' : ''}`}>
+                        <span className={`leading-relaxed ${isDone ? 'line-through text-[#5B666E] dark:text-slate-400' : ''}`}>
                           {taskText}
                         </span>
                       </div>

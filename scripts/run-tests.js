@@ -1,5 +1,12 @@
 import { calculateReadiness } from '../src/lib/readiness.js';
 import { advanceCard, isCardDue } from '../src/lib/leitner.js';
+import {
+  calculateStreak,
+  calculateStudyTime,
+  calculateTopicMastery,
+  evaluateStudyPlan,
+  formatLocalDate,
+} from '../src/lib/studyAnalytics.js';
 
 let passed = 0;
 let failed = 0;
@@ -103,6 +110,77 @@ assert(cardAdvanced.box === 2, 'Advances card from Box 1 to Box 2 on success');
 
 const cardFailed = advanceCard({ ...card, box: 4 }, false, baseDate);
 assert(cardFailed.box === 1, 'Resets card from Box 4 to Box 1 on failure');
+
+// 3. Streak calculation unit tests
+const testToday = new Date('2026-10-25T10:00:00Z');
+const emptyStreak = calculateStreak([], testToday);
+assert(emptyStreak === 0, 'Streak is 0 for new account with no study actions');
+
+const missedDayActions = [
+  { created_at: '2026-10-20T10:00:00Z' },
+  { created_at: '2026-10-21T10:00:00Z' },
+];
+assert(calculateStreak(missedDayActions, testToday) === 0, 'Streak resets to 0 after missed days');
+
+const consecutiveActions = [
+  { created_at: '2026-10-23T10:00:00Z' },
+  { created_at: '2026-10-24T10:00:00Z' },
+  { created_at: '2026-10-25T08:00:00Z' },
+];
+assert(calculateStreak(consecutiveActions, testToday) === 3, 'Calculates exact 3-day consecutive streak');
+
+const yesterdayOnly = [
+  { created_at: '2026-10-24T10:00:00Z' },
+];
+assert(calculateStreak(yesterdayOnly, testToday) === 1, 'Maintains 1-day active streak from yesterday before today study');
+
+// 4. Study-time aggregation & 7-day chart tests
+const emptyStudyTime = calculateStudyTime([], testToday);
+assert(emptyStudyTime.thisWeekDisplay === '0h 0m', 'Empty account shows 0h 0m study time');
+assert(emptyStudyTime.chartData.length === 7, 'Weekly chart has exactly 7 days');
+assert(emptyStudyTime.chartData.every((d) => d.minutes === 0), 'Empty account chart has all zero minutes');
+assert(emptyStudyTime.chartData[6].date === formatLocalDate(testToday), 'Chart ends on current date (no future bars)');
+
+const realSessions = [
+  { created_at: '2026-10-24T10:00:00Z', duration_seconds: 1800 }, // 30 mins
+  { created_at: '2026-10-25T09:00:00Z', duration_seconds: 2700 }, // 45 mins
+];
+const aggregatedTime = calculateStudyTime(realSessions, testToday);
+assert(aggregatedTime.thisWeekDisplay === '1h 15m', 'Correctly aggregates 1h 15m study time for current week');
+assert(aggregatedTime.chartData[6].minutes === 45, 'Accurately displays 45 minutes on today bar');
+assert(aggregatedTime.chartData[5].minutes === 30, 'Accurately displays 30 minutes on yesterday bar');
+
+// 5. Topic mastery tests (Rule: >= 5 answered in topic with >= 80% accuracy)
+const sampleTopics = [
+  { id: 't1', name: 'Cloud Benefits' },
+  { id: 't2', name: 'Availability Zones' },
+];
+const masteryAttempts = [
+  { topic_id: 't1', is_correct: true },
+  { topic_id: 't1', is_correct: true },
+  { topic_id: 't1', is_correct: true },
+  { topic_id: 't1', is_correct: true },
+  { topic_id: 't1', is_correct: true },
+  { topic_id: 't2', is_correct: true },
+  { topic_id: 't2', is_correct: true },
+  { topic_id: 't2', is_correct: true },
+];
+const topicMasteryRes = calculateTopicMastery(masteryAttempts, sampleTopics);
+assert(topicMasteryRes.masteredCount === 1, 'Counts exactly 1 topic mastered');
+assert(topicMasteryRes.topicsWithStatus[0].isMastered === true, 'Topic 1 is mastered with 5/5');
+assert(topicMasteryRes.topicsWithStatus[1].isMastered === false, 'Topic 2 is not mastered with only 3 answers (< 5 threshold)');
+
+// 6. Study plan auto-ticking evaluation tests
+const planTestItems = [
+  { id: 'p1', title: 'Diagnostic', type: 'auto', trigger: { action: 'diagnostic_quiz', minAnswers: 10 }, done: false },
+  { id: 'p2', title: 'Manual Review', type: 'manual', done: false },
+];
+const planEvaluatedEmpty = evaluateStudyPlan(planTestItems, { attempts: [] });
+assert(planEvaluatedEmpty[0].done === false, 'Diagnostic quiz plan item is undone when attempts < 10');
+
+const planEvaluatedFull = evaluateStudyPlan(planTestItems, { attempts: Array(10).fill({ is_correct: true }) });
+assert(planEvaluatedFull[0].done === true, 'Diagnostic quiz plan item automatically completes when attempts >= 10');
+assert(planEvaluatedFull[1].done === false, 'Manual plan item remains false until user ticks');
 
 console.log(`\nSummary: ${passed} passed, ${failed} failed.`);
 if (failed > 0) process.exit(1);
